@@ -97,11 +97,10 @@ async fn main() -> Result<()> {
     println!("📊 Found {} existing round accounts", existing_rounds.len());
     println!("🎯 Highest round ID: {}", highest_round_id);
 
-    // Determine starting point - process all rounds from highest down to round 1
+    // Process all rounds from highest down to round 1
     let start_round = highest_round_id;
     let end_round = 1; // Process until round 1
 
-    // Check if we already processed these
     let last_processed = last_round_id.unwrap_or(0);
     if last_processed >= start_round as i64 {
         println!(
@@ -110,9 +109,6 @@ async fn main() -> Result<()> {
         );
         return Ok(());
     }
-
-    // Adjust end_round to not duplicate processed rounds
-    let end_round = end_round.max((last_processed + 1) as u64);
 
     println!(
         "🔄 Processing all rounds: {} to {} ({} total rounds)",
@@ -134,7 +130,6 @@ async fn main() -> Result<()> {
 
         // Skip if already processed
         if round_exists(&conn, round_id as i64).await? {
-            println!("⏭️  Round {} already processed", round_id);
             continue;
         }
 
@@ -145,14 +140,11 @@ async fn main() -> Result<()> {
                     error_count += 1;
                 } else {
                     processed_count += 1;
-                    if processed_count % 100 == 0 {
-                        println!("✅ Processed {} rounds...", processed_count);
-                    }
+                    println!("✅ Processed round {}", round_id);
                 }
             }
             Ok(None) => {
-                // Round not finalized yet
-                println!("⏭️  Round {} not finalized yet", round_id);
+                // Round not finalized yet - don't log to reduce verbosity
             }
             Err(e) => {
                 println!("❌ Error processing round {}: {}", round_id, e);
