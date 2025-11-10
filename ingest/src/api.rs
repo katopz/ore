@@ -1,10 +1,14 @@
 #[cfg(feature = "api")]
+use crate::blockchain::BlockchainClient;
+#[cfg(feature = "api")]
 use crate::database::Database;
+#[cfg(feature = "api")]
+use crate::ingest::IngestOrchestrator;
 #[cfg(feature = "api")]
 use crate::types::{ErrorResponse, RoundListResponse};
 #[cfg(feature = "api")]
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::StatusCode,
     response::Json,
     routing::get,
@@ -27,8 +31,9 @@ pub struct ListQueryParams {
 
 #[cfg(feature = "api")]
 /// API server state
+#[derive(Clone)]
 pub struct AppState {
-    pub db: Database,
+    pub db_url: String,
 }
 
 #[cfg(feature = "api")]
@@ -60,17 +65,50 @@ async fn health_check() -> Result<Json<HashMap<String, String>>, StatusCode> {
 async fn trigger_ingest(
     State(state): State<AppState>,
 ) -> Result<Json<HashMap<String, String>>, (StatusCode, Json<ErrorResponse>)> {
-    // For now, return a message indicating manual ingest is required
-    // In a real implementation, you might trigger a background job
+    // Get configuration from environment or from state
+    let db_url = state.db_url;
+    let rpc_url = std::env::var("SOLANA_RPC")
+        .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+
+    // Create blockchain client
+    let blockchain = BlockchainClient::new(&rpc_url);
+
+    // Spawn the ingestion task in the background
+    let db_url_clone = db_url.clone();
+    let rpc_url_clone = rpc_url.clone();
+
+    tokio::spawn(async move {
+        // Create new database connection for the background task
+        let db = match Database::new(&db_url_clone).await {
+            Ok(db) => db,
+            Err(e) => {
+                eprintln!("❌ Failed to create database connection: {}", e);
+                return;
+            }
+        };
+
+        // Initialize schema
+        if let Err(e) = db.init_schema().await {
+            eprintln!("❌ Failed to initialize database schema: {}", e);
+            return;
+        }
+
+        // Create ingest orchestrator and run
+        let orchestrator = IngestOrchestrator::new(db, blockchain);
+        if let Err(e) = orchestrator.run(&db_url_clone, &rpc_url_clone).await {
+            eprintln!("❌ Ingestion failed: {}", e);
+        }
+    });
+
     let mut response = HashMap::new();
     response.insert(
         "message".to_string(),
-        "Ingest should be run manually via CLI".to_string(),
+        "Ingestion started in background".to_string(),
     );
-    response.insert(
-        "command".to_string(),
-        "cargo run --bin ore-ingest".to_string(),
-    );
+    response.insert("status".to_string(), "started".to_string());
+    response.insert("database".to_string(), db_url);
+    response.insert("rpc".to_string(), rpc_url);
+
     Ok(Json(response))
 }
 
@@ -82,8 +120,22 @@ async fn list_rounds(
 ) -> Result<Json<RoundListResponse>, (StatusCode, Json<ErrorResponse>)> {
     let limit = params.limit;
 
+    // Create database connection
+    let db = match Database::new(&state.db_url).await {
+        Ok(db) => db,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::new(&format!(
+                    "Failed to connect to database: {}",
+                    e
+                ))),
+            ))
+        }
+    };
+
     // Get rounds from database
-    let rounds = match state.db.list_rounds(limit).await {
+    let rounds = match db.list_rounds(limit).await {
         Ok(rounds) => rounds,
         Err(e) => {
             return Err((
@@ -97,7 +149,7 @@ async fn list_rounds(
     };
 
     // Get total count
-    let total = match state.db.get_rounds_count().await {
+    let total = match db.get_rounds_count().await {
         Ok(count) => count,
         Err(e) => {
             return Err((
@@ -118,8 +170,8 @@ async fn list_rounds(
 
 #[cfg(feature = "api")]
 /// Start the API server
-pub async fn start_api_server(db: Database, port: u16) -> Result<(), Box<dyn std::error::Error>> {
-    let app_state = AppState { db };
+pub async fn start_api_server(db_url: String, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+    let app_state = AppState { db_url };
 
     let app = create_api_routes().with_state(app_state);
 

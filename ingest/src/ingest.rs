@@ -104,11 +104,7 @@ impl IngestOrchestrator {
                 continue;
             }
 
-            match self
-                .blockchain
-                .process_round_from_data(pubkey, round)
-                .await
-            {
+            match self.blockchain.process_round_from_data(pubkey, round).await {
                 Ok(Some(winner_data)) => {
                     if let Err(e) = self.db.save_round_winner(&winner_data).await {
                         println!("❌ Failed to save round {}: {}", round_id, e);
@@ -131,7 +127,7 @@ impl IngestOrchestrator {
             }
 
             // Rate limiting between requests
-            self.blockchain.delay_between_requests().await;
+            BlockchainClient::delay_between_requests().await;
         }
 
         println!("\n🎉 Ingestion Complete!");
