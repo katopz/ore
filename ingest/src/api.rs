@@ -189,6 +189,6 @@ pub async fn start_api_server(
     _db: crate::database::Database,
     _port: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("❌ API feature not enabled. Run with --features api to enable API server.");
+    println!("❌ API feature not enabled. Build with default features or use --features api to enable API server.");
     Ok(())
 }

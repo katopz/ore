@@ -260,7 +260,7 @@ curl http://localhost:8080/health
    # Kill existing process
    lsof -ti:8080 | xargs kill -9
    # Or use different port
-   cargo run --features api -- --mode api --port 3000
+   cargo run -- --mode api --port 3000
    ```
 
 2. **Database connection failed**
