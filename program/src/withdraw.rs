@@ -20,7 +20,7 @@ pub fn process_withdraw(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramRes
     mint_info.has_address(&MINT_ADDRESS)?.as_mint()?;
     recipient_info
         .is_writable()?
-        .as_associated_token_account(&signer_info.key, &mint_info.key)?;
+        .as_associated_token_account(signer_info.key, mint_info.key)?;
     let stake = stake_info
         .as_account_mut::<Stake>(&ore_api::ID)?
         .assert_mut(|s| s.authority == *signer_info.key)?;
@@ -58,7 +58,7 @@ pub fn process_withdraw(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramRes
 
     // Log withdraw.
     sol_log(
-        &format!(
+        format!(
             "Withdrawing {} ORE",
             amount_to_ui_amount(amount, TOKEN_DECIMALS)
         )

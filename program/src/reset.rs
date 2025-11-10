@@ -32,7 +32,7 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
         .has_seeds(&[ROUND, &(board.round_id + 1).to_le_bytes()], &ore_api::ID)?;
     let mint = mint_info.has_address(&MINT_ADDRESS)?.as_mint()?;
     let treasury = treasury_info.as_account_mut::<Treasury>(&ore_api::ID)?;
-    treasury_tokens_info.as_associated_token_account(&treasury_info.key, &mint_info.key)?;
+    treasury_tokens_info.as_associated_token_account(treasury_info.key, mint_info.key)?;
     system_program.is_program(&system_program::ID)?;
     token_program.is_program(&spl_token::ID)?;
     ore_program.is_program(&ore_api::ID)?;
@@ -158,8 +158,8 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
         board.end_slot = u64::MAX;
 
         // Do SOL transfers.
-        round_info.send(total_admin_fee, &fee_collector_info);
-        round_info.send(round.total_deployed - total_admin_fee, &treasury_info);
+        round_info.send(total_admin_fee, fee_collector_info);
+        round_info.send(round.total_deployed - total_admin_fee, treasury_info);
         return Ok(());
     }
 
@@ -261,8 +261,8 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
     board.end_slot = u64::MAX; // board.start_slot + 150;
 
     // Do SOL transfers.
-    round_info.send(total_admin_fee, &fee_collector_info);
-    round_info.send(vault_amount, &treasury_info);
+    round_info.send(total_admin_fee, fee_collector_info);
+    round_info.send(vault_amount, treasury_info);
 
     Ok(())
 }

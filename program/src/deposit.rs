@@ -20,7 +20,7 @@ pub fn process_deposit(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResu
     mint_info.has_address(&MINT_ADDRESS)?.as_mint()?;
     let sender = sender_info
         .is_writable()?
-        .as_associated_token_account(&signer_info.key, &MINT_ADDRESS)?;
+        .as_associated_token_account(signer_info.key, &MINT_ADDRESS)?;
     stake_info.is_writable()?;
     let treasury = treasury_info.as_account_mut::<Treasury>(&ore_api::ID)?;
     system_program.is_program(&system_program::ID)?;
@@ -32,7 +32,7 @@ pub fn process_deposit(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResu
         create_program_account::<Stake>(
             stake_info,
             system_program,
-            &signer_info,
+            signer_info,
             &ore_api::ID,
             &[STAKE, &signer_info.key.to_bytes()],
         )?;
@@ -84,7 +84,7 @@ pub fn process_deposit(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResu
 
     // Log deposit.
     sol_log(
-        &format!(
+        format!(
             "Depositing {} ORE",
             amount_to_ui_amount(amount, TOKEN_DECIMALS)
         )

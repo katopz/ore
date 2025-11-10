@@ -83,7 +83,7 @@ pub fn process_deploy(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResul
         amount = automation.amount;
 
         // Set squares
-        match AutomationStrategy::from_u64(automation.strategy as u64) {
+        match AutomationStrategy::from_u64(automation.strategy) {
             AutomationStrategy::Preferred => {
                 // Preferred automation strategy. Use the miner authority's provided mask.
                 for i in 0..25 {
@@ -92,7 +92,7 @@ pub fn process_deploy(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResul
             }
             AutomationStrategy::Random => {
                 // Random automation strategy. Generate a random mask based on number of squares user wants to deploy to.
-                let num_squares = ((automation.mask & 0xFF) as u64).min(25);
+                let num_squares = ((automation.mask & 0xFF)).min(25);
                 let r = hashv(&[&automation.authority.to_bytes(), &round.id.to_le_bytes()]).0;
                 squares = generate_random_mask(num_squares, &r);
             }
@@ -196,26 +196,26 @@ pub fn process_deploy(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResul
     // Top up checkpoint fee.
     if miner.checkpoint_fee == 0 {
         miner.checkpoint_fee = CHECKPOINT_FEE;
-        miner_info.collect(CHECKPOINT_FEE, &signer_info)?;
+        miner_info.collect(CHECKPOINT_FEE, signer_info)?;
     }
 
     // Transfer SOL.
     if let Some(automation) = automation {
         automation.balance -= total_amount + automation.fee;
-        automation_info.send(total_amount, &round_info);
-        automation_info.send(automation.fee, &signer_info);
+        automation_info.send(total_amount, round_info);
+        automation_info.send(automation.fee, signer_info);
 
         // Close automation if balance is less than what's required to deploy 1 square.
         if automation.balance < automation.amount + automation.fee {
             automation_info.close(authority_info)?;
         }
     } else {
-        round_info.collect(total_amount, &signer_info)?;
+        round_info.collect(total_amount, signer_info)?;
     }
 
     // Log
     sol_log(
-        &format!(
+        format!(
             "Round #{}: deploying {} SOL to {} squares",
             round.id,
             lamports_to_sol(amount),
@@ -232,7 +232,7 @@ fn generate_random_mask(num_squares: u64, r: &[u8]) -> [bool; 25] {
     let mut selected = 0;
     for i in 0..25 {
         let rand_byte = r[i];
-        let remaining_needed = num_squares as u64 - selected as u64;
+        let remaining_needed = num_squares - selected as u64;
         let remaining_positions = 25 - i;
         if remaining_needed > 0
             && (rand_byte as u64) * (remaining_positions as u64) < (remaining_needed * 256)

@@ -18,7 +18,7 @@ pub fn process_claim_sol(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramR
     // Normalize amount.
     let amount = miner.claim_sol(&clock);
 
-    sol_log(&format!("Claiming {} SOL", lamports_to_sol(amount)).as_str());
+    sol_log(format!("Claiming {} SOL", lamports_to_sol(amount)).as_str());
 
     // Transfer reward to recipient.
     miner_info.send(amount, signer_info);

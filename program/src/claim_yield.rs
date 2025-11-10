@@ -25,7 +25,7 @@ pub fn process_claim_yield(accounts: &[AccountInfo<'_>], data: &[u8]) -> Program
     let treasury = treasury_info.as_account_mut::<Treasury>(&ore_api::ID)?;
     treasury_tokens_info
         .is_writable()?
-        .as_associated_token_account(&treasury_info.key, &mint_info.key)?;
+        .as_associated_token_account(treasury_info.key, mint_info.key)?;
     system_program.is_program(&system_program::ID)?;
     token_program.is_program(&spl_token::ID)?;
     associated_token_program.is_program(&spl_associated_token_account::ID)?;
@@ -42,7 +42,7 @@ pub fn process_claim_yield(accounts: &[AccountInfo<'_>], data: &[u8]) -> Program
             associated_token_program,
         )?;
     } else {
-        recipient_info.as_associated_token_account(&signer_info.key, &mint_info.key)?;
+        recipient_info.as_associated_token_account(signer_info.key, mint_info.key)?;
     }
 
     // Claim yield from stake account.
@@ -60,7 +60,7 @@ pub fn process_claim_yield(accounts: &[AccountInfo<'_>], data: &[u8]) -> Program
 
     // Log claim.
     sol_log(
-        &format!(
+        format!(
             "Claiming {} ORE",
             amount_to_ui_amount(amount, TOKEN_DECIMALS)
         )

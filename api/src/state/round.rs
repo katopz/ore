@@ -95,7 +95,7 @@ impl Round {
     }
 
     pub fn did_hit_motherlode(&self, rng: u64) -> bool {
-        rng.reverse_bits() % 625 == 0
+        rng.reverse_bits().is_multiple_of(625)
     }
 }
 

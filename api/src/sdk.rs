@@ -14,7 +14,7 @@ pub fn log(signer: Pubkey, msg: &[u8]) -> Instruction {
     Instruction {
         program_id: crate::ID,
         accounts: vec![AccountMeta::new(signer, true)],
-        data: data,
+        data,
     }
 }
 
@@ -49,7 +49,7 @@ pub fn automate(
             deposit: deposit.to_le_bytes(),
             fee: fee.to_le_bytes(),
             mask: mask.to_le_bytes(),
-            strategy: strategy as u8,
+            strategy,
         }
         .to_bytes(),
     }
@@ -427,7 +427,7 @@ pub fn new_var(
         ],
         data: NewVar {
             id: id.to_le_bytes(),
-            commit: commit,
+            commit,
             samples: samples.to_le_bytes(),
         }
         .to_bytes(),

@@ -29,7 +29,7 @@ pub fn process_automate(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramRes
         create_program_account::<Miner>(
             miner_info,
             system_program,
-            &signer_info,
+            signer_info,
             &ore_api::ID,
             &[MINER, &signer_info.key.to_bytes()],
         )?;
@@ -99,7 +99,7 @@ pub fn process_automate(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramRes
     // Top up checkpoint fee.
     if miner.checkpoint_fee == 0 {
         miner.checkpoint_fee = CHECKPOINT_FEE;
-        miner_info.collect(CHECKPOINT_FEE, &signer_info)?;
+        miner_info.collect(CHECKPOINT_FEE, signer_info)?;
     }
 
     // Transfer balance to executor.

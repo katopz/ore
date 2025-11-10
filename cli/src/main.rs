@@ -33,7 +33,7 @@ use steel::{AccountDeserialize, Clock, Discriminator, Instruction};
 async fn main() {
     // Read keypair from file
     let payer =
-        read_keypair_file(&std::env::var("KEYPAIR").expect("Missing KEYPAIR env var")).unwrap();
+        read_keypair_file(std::env::var("KEYPAIR").expect("Missing KEYPAIR env var")).unwrap();
 
     // Build transaction
     let rpc = RpcClient::new(std::env::var("RPC").expect("Missing RPC env var"));
@@ -193,7 +193,7 @@ async fn log_stake(
     println!("  last_withdraw_at: {}", stake.last_withdraw_at);
     println!(
         "  rewards_factor: {}",
-        stake.rewards_factor.to_i80f48().to_string()
+        stake.rewards_factor.to_i80f48()
     );
     println!(
         "  rewards: {} ORE",
@@ -494,9 +494,9 @@ async fn checkpoint_all(
     for (i, (_address, miner)) in miners.iter().enumerate() {
         if miner.checkpoint_id < miner.round_id {
             // Log the expiry slot for the round.
-            if !expiry_slots.contains_key(&miner.round_id) {
+            if let std::collections::hash_map::Entry::Vacant(e) = expiry_slots.entry(miner.round_id) {
                 if let Ok(round) = get_round(rpc, miner.round_id).await {
-                    expiry_slots.insert(miner.round_id, round.expires_at);
+                    e.insert(round.expires_at);
                 }
             }
 
@@ -541,7 +541,7 @@ async fn close_all(
     let rounds = get_rounds(rpc).await?;
     let mut ixs = vec![];
     let clock = get_clock(rpc).await?;
-    for (_i, (_address, round)) in rounds.iter().enumerate() {
+    for (_address, round) in rounds.iter() {
         if clock.slot >= round.expires_at {
             ixs.push(ore_api::sdk::close(
                 payer.pubkey(),
@@ -630,11 +630,11 @@ async fn log_treasury(rpc: &RpcClient) -> Result<(), anyhow::Error> {
     );
     println!(
         "  miner_rewards_factor: {}",
-        treasury.miner_rewards_factor.to_i80f48().to_string()
+        treasury.miner_rewards_factor.to_i80f48()
     );
     println!(
         "  stake_rewards_factor: {}",
-        treasury.stake_rewards_factor.to_i80f48().to_string()
+        treasury.stake_rewards_factor.to_i80f48()
     );
     println!(
         "  total_staked: {} ORE",
@@ -687,7 +687,7 @@ async fn log_miner(
     let authority = std::env::var("AUTHORITY").unwrap_or(payer.pubkey().to_string());
     let authority = Pubkey::from_str(&authority).expect("Invalid AUTHORITY");
     let miner_address = ore_api::state::miner_pda(authority).0;
-    let miner = get_miner(&rpc, authority).await?;
+    let miner = get_miner(rpc, authority).await?;
     println!("Miner");
     println!("  address: {}", miner_address);
     println!("  authority: {}", authority);
@@ -716,7 +716,7 @@ async fn log_miner(
 }
 
 async fn log_clock(rpc: &RpcClient) -> Result<(), anyhow::Error> {
-    let clock = get_clock(&rpc).await?;
+    let clock = get_clock(rpc).await?;
     println!("Clock");
     println!("  slot: {}", clock.slot);
     println!("  epoch_start_timestamp: {}", clock.epoch_start_timestamp);
@@ -727,7 +727,7 @@ async fn log_clock(rpc: &RpcClient) -> Result<(), anyhow::Error> {
 }
 
 async fn log_config(rpc: &RpcClient) -> Result<(), anyhow::Error> {
-    let config = get_config(&rpc).await?;
+    let config = get_config(rpc).await?;
     println!("Config");
     println!("  admin: {}", config.admin);
     println!("  bury_authority: {}", config.bury_authority);
@@ -739,8 +739,8 @@ async fn log_config(rpc: &RpcClient) -> Result<(), anyhow::Error> {
 }
 
 async fn log_board(rpc: &RpcClient) -> Result<(), anyhow::Error> {
-    let board = get_board(&rpc).await?;
-    let clock = get_clock(&rpc).await?;
+    let board = get_board(rpc).await?;
+    let clock = get_clock(rpc).await?;
     print_board(board, &clock);
     Ok(())
 }
@@ -1054,9 +1054,9 @@ where
                             );
                     }
                 }
-                return Err(anyhow::anyhow!("Failed to get program accounts: {}", err));
+                Err(anyhow::anyhow!("Failed to get program accounts: {}", err))
             }
-            _ => return Err(anyhow::anyhow!("Failed to get program accounts: {}", err)),
+            _ => Err(anyhow::anyhow!("Failed to get program accounts: {}", err)),
         },
     }
 }

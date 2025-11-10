@@ -99,7 +99,7 @@ pub fn process_bury(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
     let total_ore = post_swap_ore_balance - pre_swap_ore_balance;
     assert_eq!(post_swap_sol_balance, 0);
     sol_log(
-        &format!(
+        format!(
             "📈 Swapped {} SOL into {} ORE",
             lamports_to_sol(pre_swap_sol_balance),
             amount_to_ui_amount(total_ore, TOKEN_DECIMALS),
@@ -132,7 +132,7 @@ pub fn process_bury(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
     )?;
 
     sol_log(
-        &format!(
+        format!(
             "🔥 Buried {} ORE",
             amount_to_ui_amount(burn_amount, TOKEN_DECIMALS)
         )
