@@ -157,30 +157,18 @@ Retrieves list of processed rounds with pagination.
 
 ## 🗄️ Database Schema
 
-The service creates a `round_winners` table:
+The database schema is defined in [`sql/schema.sql`](sql/schema.sql) and includes:
 
-```sql
-CREATE TABLE round_winners (
-    id INTEGER PRIMARY KEY,                    -- Round ID
-    address TEXT NOT NULL,                     -- Round account address
-    winning_square INTEGER NOT NULL,             -- Winning square (0-24)
-    winning_row INTEGER NOT NULL,               -- Winning row (1-5)
-    winning_col INTEGER NOT NULL,               -- Winning column (1-5)
-    top_miner TEXT NOT NULL,                   -- Top miner pubkey
-    top_miner_reward INTEGER NOT NULL,           -- ORE reward amount
-    split_reward BOOLEAN NOT NULL,              -- Whether rewards are split
-    motherlode_hit BOOLEAN NOT NULL,            -- Whether motherlode was hit
-    motherlode_amount INTEGER NOT NULL,          -- Motherlode amount if hit
-    total_deployed INTEGER NOT NULL,             -- Total SOL deployed
-    total_vaulted INTEGER NOT NULL,             -- Total SOL vaulted
-    total_winnings INTEGER NOT NULL,             -- Total SOL won
-    winners_count INTEGER NOT NULL,              -- Number of winners
-    expires_at INTEGER NOT NULL,                -- Expiration slot
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP -- When recorded
-);
+- **round_winners table** with all round data
+- **Indexes** for efficient queries by ID, winning square, miner, and timestamps
+- **Automatic schema initialization** when service starts
 
-CREATE INDEX idx_round_winners_id ON round_winners(id);
-```
+Key fields:
+- `id` - Round identifier (primary key)
+- `winning_square`, `winning_row`, `winning_col` - Grid coordinates
+- `top_miner`, `top_miner_reward` - Winner information
+- `total_deployed`, `total_vaulted`, `total_winnings` - Round statistics
+- `expires_at` - Claim expiration timestamp
 
 ## 🏗️ Architecture
 
