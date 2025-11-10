@@ -97,13 +97,9 @@ async fn main() -> Result<()> {
     println!("📊 Found {} existing round accounts", existing_rounds.len());
     println!("🎯 Highest round ID: {}", highest_round_id);
 
-    // Determine starting point - only process last 10 rounds
+    // Determine starting point - process all rounds from highest down to round 1
     let start_round = highest_round_id;
-    let end_round = if start_round >= 10 {
-        start_round - 10 + 1 // Last 10 rounds inclusive
-    } else {
-        0 // All available rounds if less than 10
-    };
+    let end_round = 1; // Process until round 1
 
     // Check if we already processed these
     let last_processed = last_round_id.unwrap_or(0);
@@ -119,7 +115,7 @@ async fn main() -> Result<()> {
     let end_round = end_round.max((last_processed + 1) as u64);
 
     println!(
-        "🔄 Processing last 10 rounds: {} to {} ({} total rounds)",
+        "🔄 Processing all rounds: {} to {} ({} total rounds)",
         start_round,
         end_round,
         start_round - end_round + 1
@@ -129,11 +125,11 @@ async fn main() -> Result<()> {
     let mut processed_count = 0;
     let mut error_count = 0;
 
-    // Sort rounds by ID (newest first) and take last 10
+    // Sort rounds by ID (newest first) and process all
     let mut sorted_rounds: Vec<_> = existing_rounds.iter().collect();
     sorted_rounds.sort_by(|a, b| b.1.id.cmp(&a.1.id));
 
-    for (pubkey, round) in sorted_rounds.iter().take(10) {
+    for (pubkey, round) in sorted_rounds.iter() {
         let round_id = round.id;
 
         // Skip if already processed
@@ -149,7 +145,9 @@ async fn main() -> Result<()> {
                     error_count += 1;
                 } else {
                     processed_count += 1;
-                    println!("✅ Processed round {}", round_id);
+                    if processed_count % 100 == 0 {
+                        println!("✅ Processed {} rounds...", processed_count);
+                    }
                 }
             }
             Ok(None) => {
