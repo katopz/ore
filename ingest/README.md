@@ -260,31 +260,7 @@ curl http://localhost:8080/health
 - **API**: Non-blocking background processing
 - **Resumability**: Automatic resume saves bandwidth
 
-## 🔍 Query Examples
 
-```sql
--- Latest rounds
-SELECT id, winning_square, top_miner, winners_count 
-FROM round_winners ORDER BY id DESC LIMIT 10;
-
--- Motherlode hits
-SELECT id, motherlode_amount, winners_count 
-FROM round_winners 
-WHERE motherlode_hit = TRUE 
-ORDER BY id DESC;
-
--- Winning square distribution
-SELECT winning_square, COUNT(*) as frequency
-FROM round_winners 
-GROUP BY winning_square 
-ORDER BY frequency DESC;
-
--- Highest rewards
-SELECT id, top_miner_reward, total_deployed
-FROM round_winners 
-ORDER BY top_miner_reward DESC 
-LIMIT 10;
-```
 
 ## 🚨 Troubleshooting
 
