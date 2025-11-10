@@ -43,10 +43,10 @@ Start the REST API server:
 
 ```bash
 # Start API server on port 8080
-cargo run --release -- --mode api --port 8080
+cargo run --release --bin ore-ingest -- --mode api --port 8080
 
 # Run in background
-cargo run --release -- --mode api --port 8080 &
+cargo run --release --bin ore-ingest -- --mode api --port 8080 &
 ```
 
 #### API Endpoints
@@ -73,23 +73,23 @@ Run ingestion directly:
 
 ```bash
 # One-time ingestion (CLI mode)
-cargo run --release -- --mode cli
+cargo run --release --bin ore-ingest -- --mode cli
 
 # Or without API features (minimal build)
-cargo run --release --no-default-features
+cargo run --release --bin ore-ingest --no-default-features
 ```
 
 ### CLI Options
 
 ```bash
 # Show help
-cargo run --release -- --help
+cargo run --release --bin ore-ingest -- --help
 
 # API mode with custom port
-cargo run --release -- --mode api --port 3000
+cargo run --release --bin ore-ingest -- --mode api --port 3000
 
 # CLI ingestion mode
-cargo run --release -- --mode cli
+cargo run --release --bin ore-ingest -- --mode cli
 ```
 
 ## 📊 API Reference
@@ -236,7 +236,7 @@ cargo build --release
 ```bash
 # Auto-reload during development
 cargo install cargo-watch
-cargo watch -x 'run -- --mode api --port 8080'
+cargo watch -x 'run --bin ore-ingest -- --mode api --port 8080'
 ```
 
 ### Testing
@@ -247,7 +247,7 @@ export TURSO_URL="test.db"
 cargo test
 
 # Test API endpoints
-cargo run -- --mode api --port 8080 &
+cargo run --bin ore-ingest -- --mode api --port 8080 &
 curl http://localhost:8080/health
 ```
 
@@ -281,7 +281,7 @@ curl http://localhost:8080/health
 
 ```bash
 # Enable debug logging
-RUST_LOG=debug cargo run -- --mode api
+RUST_LOG=debug cargo run --bin ore-ingest -- --mode api
 
 # Check background tasks
 ps aux | grep ore-ingest
