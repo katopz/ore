@@ -72,8 +72,8 @@ curl "http://localhost:8080/list?limit=5"
 Run ingestion directly:
 
 ```bash
-# One-time ingestion (traditional mode)
-cargo run --release -- --mode ingest
+# One-time ingestion (CLI mode)
+cargo run --release -- --mode cli
 
 # Or without API features (minimal build)
 cargo run --release --no-default-features
@@ -88,8 +88,8 @@ cargo run --release -- --help
 # API mode with custom port
 cargo run --release -- --mode api --port 3000
 
-# Direct ingestion mode
-cargo run --release -- --mode ingest
+# CLI ingestion mode
+cargo run --release -- --mode cli
 ```
 
 ## 📊 API Reference

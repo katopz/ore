@@ -24,8 +24,8 @@ async fn main() -> Result<()> {
                 .short('m')
                 .long("mode")
                 .value_name("MODE")
-                .help("Run mode: 'ingest' or 'api'")
-                .default_value("ingest"),
+                .help("Run mode: 'cli' or 'api'")
+                .default_value("cli"),
         )
         .arg(
             Arg::new("port")
@@ -42,9 +42,9 @@ async fn main() -> Result<()> {
 
     match mode.as_str() {
         "api" => run_api_server(port).await,
-        "ingest" => run_ingestion().await,
+        "cli" => run_ingestion().await,
         _ => {
-            eprintln!("Invalid mode. Use 'ingest' or 'api'");
+            eprintln!("Invalid mode. Use 'cli' or 'api'");
             Ok(())
         }
     }
