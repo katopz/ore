@@ -1,21 +1,22 @@
 # ORE Round Winner Data Ingestion
 
-This project ingests historical ORE mining round winner data from the Solana blockchain into a Turso SQLite database for analysis and tracking.
+This project ingests historical ORE mining round winner data from Solana blockchain into a Turso SQLite database for analysis and tracking.
 
 ## 🎯 Purpose
 
 The ORE protocol cleans up round accounts after they expire to save storage costs, making historical winner data difficult to access. This tool:
 
 - **Preserves winner data** before it's cleaned up
-- **Processes rounds sequentially** to avoid API limits
+- **Processes rounds efficiently** from blockchain
 - **Resumes from last processed round** for reliability
 - **Stores comprehensive winner information** in a queryable database
+- **Modular architecture** with separated concerns
 
 ## 📊 Data Structure
 
 Each round stores the following winner information:
 
-- **Round ID**: Unique identifier (1, 2, 3, ...)
+- **Round ID**: Unique identifier (e.g., 48670, 48669, ...)
 - **Winning Square**: Grid position (0-24, mapped to 5x5 board)
 - **Winning Coordinates**: Row and column (1-5 each)
 - **Top Miner**: Public key of the winning miner
@@ -44,7 +45,7 @@ Set environment variables:
 # Required: Solana RPC endpoint
 export SOLANA_RPC="https://api.mainnet-beta.solana.com"
 
-# Optional: Custom Turso database URL
+# Optional: Custom database file path
 export TURSO_URL="ore_rounds.db"  # Default: local file
 # export TURSO_URL="libsql://your-db.turso.io"  # Remote Turso
 ```
@@ -52,52 +53,64 @@ export TURSO_URL="ore_rounds.db"  # Default: local file
 ### Running
 
 ```bash
-# Build and run
+# Build and run (default features)
 cargo run
 
-# The tool will:
-# 1. Check existing database for last processed round
-# 2. Get current board round
-# 3. Process missing rounds one-by-one
-# 4. Store winner data in database
-# 5. Resume on next run if interrupted
+# Run without API features (minimal)
+cargo run --no-default-features
+
+# Run with API features enabled (default)
+cargo run --features api
 ```
+
+The tool will:
+1. **Initialize database schema** automatically
+2. **Check existing data** for last processed round
+3. **Find all available round accounts** from blockchain
+4. **Process missing rounds** with rate limiting
+5. **Store winner data** in database
+6. **Resume on next run** if interrupted
 
 ## 📈 Usage Examples
 
 ### Basic Ingestion
 
 ```bash
-# Process all missing rounds from latest to round 1
+# Process all missing rounds from latest down to round 1
 cargo run
 
 # Example output:
 🏆 ORE Round Winner Data Ingestion
 ===================================
-📊 Last processed round: 48547
-🎯 Current board round: 105
-🔄 Processing rounds 48548 to 105 (48443 total rounds)
-✅ Processed 10 rounds...
-✅ Processed 20 rounds...
+📊 Last processed round: 48660
+📡 Using RPC: https://api.mainnet-beta.solana.com
+💾 Database: ore_rounds.db
+🔍 Finding all existing round accounts...
+📊 Found 1070 existing round accounts
+🎯 Highest round ID: 48670
+🔄 Processing all rounds: 48670 to 1 (48670 total rounds)
+✅ Processed round 48669
+✅ Processed round 48668
 🎉 Ingestion Complete!
-📊 Processed: 48443 rounds
+📊 Processed: 9 rounds
 ❌ Errors: 0
 💾 Database: ore_rounds.db
 ```
 
-### Resume from Specific Round
+### Fresh Start
 
-The tool automatically resumes from the last processed round. To start fresh:
+To start ingestion from scratch:
 
 ```bash
-# Delete database to start from round 1
+# Delete existing database
 rm ore_rounds.db
 
-# Or specify empty database
+# Or use a different database file
 export TURSO_URL="fresh_ore.db"
+cargo run
 ```
 
-### Using Remote Turso
+### Remote Database
 
 ```bash
 # Set up remote Turso database
@@ -130,6 +143,9 @@ CREATE TABLE round_winners (
     expires_at INTEGER NOT NULL,                -- Expiration slot
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP -- When recorded
 );
+
+-- Index for faster queries
+CREATE INDEX idx_round_winners_id ON round_winners(id);
 ```
 
 ## 🔍 Querying the Data
@@ -138,7 +154,8 @@ CREATE TABLE round_winners (
 
 ```sql
 -- Find most recent rounds
-SELECT * FROM round_winners ORDER BY id DESC LIMIT 10;
+SELECT id, winning_square, top_miner, winners_count 
+FROM round_winners ORDER BY id DESC LIMIT 10;
 
 -- Find rounds with motherlode hits
 SELECT id, motherlode_amount, winners_count 
@@ -163,6 +180,14 @@ SELECT id, winning_square, winners_count
 FROM round_winners 
 WHERE split_reward = TRUE 
 ORDER BY id DESC;
+
+-- Check database statistics
+SELECT 
+    COUNT(*) as total_rounds,
+    MIN(id) as earliest_round,
+    MAX(id) as latest_round,
+    AVG(winners_count) as avg_winners
+FROM round_winners;
 ```
 
 ## ⚙️ Technical Details
@@ -181,7 +206,7 @@ The winning square is determined using entropy from Solana's slot hash:
 - **200ms delay** between round requests
 - **Sequential processing** to avoid API limits
 - **Error recovery** with 1s backoff
-- **Progress reporting** every 10 rounds
+- **Clean logging** showing only processed rounds
 
 ### Database Resumability
 
@@ -196,26 +221,61 @@ The winning square is determined using entropy from Solana's slot hash:
 
 ```
 ingest/
-├── Cargo.toml          # Dependencies and metadata
+├── Cargo.toml          # Dependencies and features
 ├── src/
-│   └── main.rs        # Main ingestion logic
-├── sql/
-│   └── schema.sql      # Database schema
+│   ├── main.rs        # Main entry point and routing
+│   ├── types.rs       # Data structures
+│   ├── database.rs    # Database operations
+│   ├── blockchain.rs  # Solana interactions
+│   ├── api.rs         # API endpoints (feature-gated)
+│   └── ingest.rs      # Business logic orchestrator
+├── examples/           # Example scripts
+│   ├── find_round_winners.rs
+│   ├── get_round.rs
+│   └── get_round_winner.rs
 └── README.md           # This file
 ```
 
+### Module Architecture
+
+- **types.rs**: All data structures and API models
+- **database.rs**: SQLite/Turso operations with connection management
+- **blockchain.rs**: Solana RPC client and round account processing
+- **main.rs**: Application entry point with feature-gated routing
+- **api.rs**: HTTP API endpoints (when `api` feature enabled)
+
 ### Dependencies
 
-- `ore-api`: ORE program API bindings
-- `solana-client`: Solana RPC client
-- `turso`: LibSQL/Turso database client
-- `tokio`: Async runtime
-- `chrono`: Date/time handling
-- `serde`: Serialization/deserialization
+```toml
+[dependencies]
+ore-api = { path = "../api" }          # ORE program bindings
+solana-client = "^2.1"                 # Solana RPC client
+turso = "0.2.2"                         # LibSQL/Turso client
+tokio = { version = "1.37.0", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+anyhow = "1.0"                         # Error handling
+
+# Optional dependencies (feature-gated)
+axum = { version = "0.8.4", optional = true }        # HTTP framework
+clap = { version = "4.0", features = ["derive"], optional = true }  # CLI parsing
+tower-http = { version = "0.6", features = ["cors"], optional = true }  # CORS
+
+[features]
+default = ["api"]    # API enabled by default
+api = ["dep:axum", "dep:clap", "dep:tower-http"]
+```
 
 ### Building
 
 ```bash
+# Standard build (with API features)
+cargo build
+
+# Minimal build (no API)
+cargo build --no-default-features
+
+# Release build
 cargo build --release
 ```
 
@@ -226,9 +286,12 @@ cargo build --release
 export TURSO_URL="test.db"
 cargo run
 
-# Test with mainnet RPC
-export SOLANA_RPC="https://api.mainnet-beta.solana.com"
+# Test with different RPC
+export SOLANA_RPC="https://api.devnet.solana.com"
 cargo run
+
+# Run tests
+cargo test
 ```
 
 ## 📝 Notes & Limitations
@@ -238,27 +301,29 @@ cargo run
 - Round accounts are **cleaned up after expiration** (typically ~24 hours)
 - **Older rounds may be unavailable** if not captured in time
 - **Current rounds** don't have winner data until finalized
+- **Historical preservation** requires regular ingestion runs
 
 ### API Considerations
 
 - **Rate limiting** is built-in to avoid RPC limits
 - **Sequential processing** ensures reliability over speed
-- **Error handling** retries failed requests
-- **Large range queries** may time out on some RPCs
+- **Error handling** retries failed requests with backoff
+- **Connection pooling** and timeout management
 
-### Database Size
+### Database Size & Performance
 
 - Each round record: ~200 bytes
 - 100,000 rounds: ~20MB database file
-- Indexes add ~30% overhead
-- Suitable for SQLite and Turso
+- Indexes add ~30% overhead for faster queries
+- Suitable for both local SQLite and remote Turso
+- Resumable ingestion saves bandwidth and time
 
 ## 🔗 Related Tools
 
-- `find_round_winners.rs`: Real-time round analysis
-- ORE CLI: Official command-line interface
-- Solana Explorer: Transaction history lookup
-- ORE Dashboard: Mining statistics
+- **examples/**: Real-time round analysis scripts
+- **ORE CLI**: Official command-line interface
+- **Solana Explorer**: Transaction history lookup
+- **ORE Dashboard**: Mining statistics visualization
 
 ## 📄 License
 
