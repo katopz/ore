@@ -1,5 +1,5 @@
 use crate::types::RoundWinner;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::Utc;
 use ore_api::prelude::*;
 use solana_account_decoder::UiAccountEncoding;
@@ -49,7 +49,7 @@ impl BlockchainClient {
         let mut result = Vec::new();
         for (pubkey, account) in accounts {
             if let Ok(data) = Round::try_from_bytes(&account.data) {
-                result.push((pubkey, data.clone()));
+                result.push((pubkey, *data));
             }
         }
         Ok(result)
