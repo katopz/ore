@@ -33,7 +33,6 @@ export SOLANA_RPC="https://api.mainnet-beta.solana.com"
 
 # Database URL (optional, defaults to local SQLite)
 export TURSO_URL="ore_rounds.db"  # Local file
-# export TURSO_URL="libsql://your-db.turso.io"  # Remote Turso
 ```
 
 ## 📋 Usage
@@ -44,10 +43,10 @@ Start the REST API server:
 
 ```bash
 # Start API server on port 8080
-cargo run --release --features api -- --mode api --port 8080
+cargo run --release -- --mode api --port 8080
 
 # Run in background
-cargo run --release --features api -- --mode api --port 8080 &
+cargo run --release -- --mode api --port 8080 &
 ```
 
 #### API Endpoints
@@ -74,7 +73,7 @@ Run ingestion directly:
 
 ```bash
 # One-time ingestion (traditional mode)
-cargo run --release --features api -- --mode ingest
+cargo run --release -- --mode ingest
 
 # Or without API features (minimal build)
 cargo run --release --no-default-features
@@ -84,13 +83,13 @@ cargo run --release --no-default-features
 
 ```bash
 # Show help
-cargo run --release --features api -- --help
+cargo run --release -- --help
 
 # API mode with custom port
-cargo run --release --features api -- --mode api --port 3000
+cargo run --release -- --mode api --port 3000
 
 # Direct ingestion mode
-cargo run --release --features api -- --mode ingest
+cargo run --release -- --mode ingest
 ```
 
 ## 📊 API Reference
@@ -237,7 +236,7 @@ cargo build --release
 ```bash
 # Auto-reload during development
 cargo install cargo-watch
-cargo watch -x 'run --features api -- --mode api --port 8080'
+cargo watch -x 'run -- --mode api --port 8080'
 ```
 
 ### Testing
@@ -248,19 +247,9 @@ export TURSO_URL="test.db"
 cargo test
 
 # Test API endpoints
-cargo run --features api -- --mode api --port 8080 &
+cargo run -- --mode api --port 8080 &
 curl http://localhost:8080/health
 ```
-
-## 📈 Performance
-
-- **Throughput**: Processes ~5 rounds/second with rate limiting
-- **Database**: ~200 bytes per round record
-- **Memory**: ~50MB typical usage
-- **API**: Non-blocking background processing
-- **Resumability**: Automatic resume saves bandwidth
-
-
 
 ## 🚨 Troubleshooting
 
@@ -292,12 +281,8 @@ curl http://localhost:8080/health
 
 ```bash
 # Enable debug logging
-RUST_LOG=debug cargo run --features api -- --mode api
+RUST_LOG=debug cargo run -- --mode api
 
 # Check background tasks
 ps aux | grep ore-ingest
 ```
-
-## 📄 License
-
-Apache License 2.0 - See parent project for details.
