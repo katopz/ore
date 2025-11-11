@@ -1,12 +1,7 @@
-#[cfg(feature = "api")]
 use crate::blockchain::BlockchainClient;
-#[cfg(feature = "api")]
 use crate::database::Database;
-#[cfg(feature = "api")]
 use crate::ingest::IngestOrchestrator;
-#[cfg(feature = "api")]
 use crate::types::{ErrorResponse, RoundListResponse};
-#[cfg(feature = "api")]
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -14,29 +9,21 @@ use axum::{
     routing::get,
     Router,
 };
-#[cfg(feature = "api")]
 use serde::Deserialize;
-#[cfg(feature = "api")]
 use std::collections::HashMap;
-#[cfg(feature = "api")]
 use tokio::net::TcpListener;
-#[cfg(feature = "api")]
 use tower_http::cors::{Any, CorsLayer};
 
-#[cfg(feature = "api")]
 #[derive(Debug, Deserialize)]
 pub struct ListQueryParams {
     pub limit: Option<i64>,
 }
 
-#[cfg(feature = "api")]
-/// API server state
 #[derive(Clone)]
 pub struct AppState {
     pub db_url: String,
 }
 
-#[cfg(feature = "api")]
 /// Initialize API routes
 pub fn create_api_routes() -> Router<AppState> {
     Router::new()
@@ -51,7 +38,6 @@ pub fn create_api_routes() -> Router<AppState> {
         )
 }
 
-#[cfg(feature = "api")]
 /// Health check endpoint
 async fn health_check() -> Result<Json<HashMap<String, String>>, StatusCode> {
     let mut response = HashMap::new();
@@ -60,7 +46,6 @@ async fn health_check() -> Result<Json<HashMap<String, String>>, StatusCode> {
     Ok(Json(response))
 }
 
-#[cfg(feature = "api")]
 /// Trigger ingest endpoint
 async fn trigger_ingest(
     State(state): State<AppState>,
@@ -73,12 +58,12 @@ async fn trigger_ingest(
     // Create blockchain client
     let blockchain = BlockchainClient::new(&rpc_url);
 
-    // Spawn the ingestion task in the background
+    // Spawn ingestion task in the background
     let db_url_clone = db_url.clone();
     let rpc_url_clone = rpc_url.clone();
 
     tokio::spawn(async move {
-        // Create new database connection for the background task
+        // Create new database connection for background task
         let db = match Database::new(&db_url_clone).await {
             Ok(db) => db,
             Err(e) => {
@@ -112,7 +97,6 @@ async fn trigger_ingest(
     Ok(Json(response))
 }
 
-#[cfg(feature = "api")]
 /// List rounds endpoint with pagination
 async fn list_rounds(
     State(state): State<AppState>,
@@ -168,7 +152,6 @@ async fn list_rounds(
     Ok(Json(response))
 }
 
-#[cfg(feature = "api")]
 /// Start the API server
 pub async fn start_api_server(db_url: String, port: u16) -> Result<(), Box<dyn std::error::Error>> {
     let app_state = AppState { db_url };
@@ -183,14 +166,64 @@ pub async fn start_api_server(db_url: String, port: u16) -> Result<(), Box<dyn s
     Ok(())
 }
 
-#[cfg(not(feature = "api"))]
-/// No-op function when API feature is not enabled
-pub async fn start_api_server(
-    _db: crate::database::Database,
-    _port: u16,
-) -> Result<(), Box<dyn std::error::Error>> {
-    println!(
-        "❌ API feature not enabled. Build without --no-default-features to enable API server."
-    );
+/// Run the API server with graceful shutdown
+pub async fn run_api_server(port: u16) -> anyhow::Result<()> {
+    let db_url = std::env::var("TURSO_URL").unwrap_or_else(|_| "ore_rounds.db".to_string());
+    let shutdown_signal = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let shutdown_signal_clone = std::sync::Arc::clone(&shutdown_signal);
+
+    // Set up signal handler
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            println!("\n🛑 Received shutdown signal");
+            shutdown_signal_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+            // Kill any processes holding the database
+            kill_database_processes();
+        }
+    });
+
+    // Initialize database schema
+    let db = Database::new(&db_url).await?;
+    db.init_schema().await?;
+
+    // Start API server
+    if let Err(e) = start_api_server(db_url, port).await {
+        eprintln!("❌ Failed to start API server: {}", e);
+        return Err(anyhow::anyhow!("API server failed: {}", e));
+    }
+
     Ok(())
+}
+
+/// Kill any processes that might be holding the database files
+fn kill_database_processes() {
+    println!("🧹 Cleaning up database locks...");
+
+    // Kill any ore-ingest processes first
+    let _ = std::process::Command::new("pkill")
+        .args(&["-f", "ore-ingest"])
+        .output();
+
+    // Find and kill processes holding database files
+    if let Ok(output) = std::process::Command::new("lsof")
+        .args(&["ore_rounds.db", "ore_rounds.db-wal", "ore_rounds.db-shm"])
+        .output()
+    {
+        if output.status.success() {
+            let lsof_output = String::from_utf8_lossy(&output.stdout);
+            for line in lsof_output.lines().skip(1) {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    if let Ok(pid) = parts[1].parse::<u32>() {
+                        println!("Killing process {} holding database", pid);
+                        let _ = std::process::Command::new("kill")
+                            .args(&["-9", &pid.to_string()])
+                            .output();
+                    }
+                }
+            }
+        }
+    }
+
+    println!("✅ Database cleanup completed");
 }

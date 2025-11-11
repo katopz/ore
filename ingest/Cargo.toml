@@ -10,7 +10,8 @@ keywords = ["ore", "solana", "turso", "ingestion"]
 
 [features]
 default = ["api"]
-api = ["dep:axum", "dep:clap", "dep:tower-http"]
+api = ["dep:axum", "dep:tower-http"]
+cli = ["dep:clap"]
 
 [dependencies]
 anyhow = "1.0"

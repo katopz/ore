@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["api", "program", "cli", "ingest"]
+members = ["api", "program", "ingest"]
 
 [workspace.package]
 version = "3.7.5"
