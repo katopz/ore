@@ -66,30 +66,93 @@ curl http://localhost:3000/list  # ✅ {"message":"Database test endpoint","db_u
 - ✅ API server stays running with database layer
 - ✅ All HTTP endpoints respond correctly
 
-## Next Phases to Debug
+## Phase 3 Results: Axum + Turso + Solana ✅
 
-### Phase 3: Axum + Solana  
-**Purpose**: Isolate if Solana SDK integration causes Docker exit
-**Method**: Add solana-* dependencies back (excluding ore-api for now)
-**Expected**: Solana client initialization, basic Solana connection test
+**Status**: WORKING
+- Container status: Running (docker ps shows active)
+- Database connection: ✅ Established successfully
+- Solana client: ✅ Initialized and connected to devnet
+- HTTP endpoints: ✅ All responding correctly including Solana endpoint
+- Exit behavior: Container stays alive (exits when stopped manually)
 
-### Phase 3: Axum + Solana  
-**Purpose**: Isolate if Solana SDK integration causes Docker exit
-**Method**: Add solana-* dependencies back
-**Expected**: Solana client initialization, /ingest endpoint works
+**Working Commands**:
+```bash
+docker build -t ore-debug-phase3 .
+docker run -d -p 3000:3000 -e PORT=3000 -e TURSO_URL=test.db ore-debug-phase3
+curl http://localhost:3000/  # ✅ {"status":"healthy","service":"ore-ingest","phase":"3-axum-turso-solana"}
+curl http://localhost:3000/solana  # ✅ {"solana_status":"connected","latest_blockhash":"..."}
+```
 
-### Phase 4: Full Stack (Axum + Turso + Solana)
-**Purpose**: Complete ore-ingest functionality
-**Method**: All dependencies enabled including ore-api
-**Expected**: Full ore-ingest functionality in Docker
+**Container Logs Output**:
+```
+🚀 Starting Phase 3: Axum + Turso + Solana debug
+📍 Working directory: Ok("/")
+🔧 Environment variables:
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  HOSTNAME=...
+  TURSO_URL=test.db
+  PORT=3000
+  HOME=/root
+🎯 Phase 3: Axum + Turso + Solana test
+📍 Port: 3000
+🗄️  Database URL: test.db
+🔧 About to start API server with database and Solana...
+🔧 Initializing database...
+🗄️  Initializing database connection to: test.db
+✅ Database connection established
+✅ Database table initialized
+✅ Database initialized successfully
+🔧 Initializing Solana client...
+🔗 Initializing Solana client...
+📍 Using Solana RPC URL: https://api.devnet.solana.com
+✅ Solana client initialized: https://api.devnet.solana.com
+✅ Solana client initialized successfully
+🔧 Creating app state...
+🔧 Creating API routes...
+🔧 Binding to port 3000...
+✅ Bound to port 3000
+🚀 API server started on http://0.0.0.0:3000
+🔧 Starting axum server...
+```
+
+**Key Findings**:
+- ✅ Solana SDK integration works perfectly in Docker
+- ✅ Solana client connects to devnet and returns latest blockhash
+- ✅ API server stays running with database and Solana layers
+- ✅ All HTTP endpoints respond correctly
+
+**IMPORTANT CONCLUSION**: The Docker exit issue is NOT caused by:
+- Docker static linking ✅
+- Axum web framework ✅ 
+- Turso/SQLite database integration ✅
+- Solana SDK integration ✅
+- Basic container environment ✅
+
+**Issue MUST be caused by:** 
+- ❌ ore-api program integration (the only remaining dependency)
+
+### Phase 4: Full Stack (Axum + Turso + Solana + ore-api)
+**Purpose**: Complete ore-ingest functionality  
+**Method**: Add ore-api dependency back
+**Expected**: Full ore-ingest functionality with ORE program integration
 
 ## Implementation Guide
 
-For Phase 2 (Axum + Turso):
-1. Restore turso, uuid, serde dependencies to ingest/Cargo.toml
-2. Add database initialization back to main.rs
-3. Keep same axum routes but add /list endpoint
-4. Test database file creation in container
+**COMPLETED PHASES:**
+- ✅ Phase 1 (Axum only): Basic web framework test
+- ✅ Phase 2 (Axum + Turso): Database layer integration test  
+- ✅ Phase 3 (Axum + Turso + Solana): Solana SDK integration test
+
+**CURRENT PHASE:**
+- 🎯 Phase 4 (Axum + Turso + Solana + ore-api): Complete application test
+
+For Phase 4:
+1. Restore ore-api dependency to ingest/Cargo.toml  
+2. Add ore-api program integration back to main.rs
+3. Test complete ore-ingest functionality
+4. Identify and fix the actual Docker exit issue
+
+**Key Insight:** The systematic debugging has isolated the issue to ore-api integration specifically.
 
 ## Files Created/Modified
 
