@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["api", "program", "ingest"]
+members = ["ingest"]
+# Phase 1: Exclude api and program packages
+# members = ["api", "program", "ingest"]
 
 [workspace.package]
 version = "3.7.5"
