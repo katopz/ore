@@ -39,8 +39,8 @@ solana-sdk = "^2.1"
 # steel = { features = ["spl"], version = "4.0.3" }
 
 # Phase 2: Re-enabled database dependencies
-turso = "0.2.2"
-uuid = { version = "1.0", features = ["v4"] }
+# turso = "0.2.2"  # Already defined above
+# uuid = { version = "1.0", features = ["v4"] }  # Already defined above
 
 # Optional API dependencies
 clap = { version = "4.0", features = ["derive"], optional = true }
