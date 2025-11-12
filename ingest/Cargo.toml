@@ -22,6 +22,7 @@ chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.37.0", features = ["full"] }
+backtrace = "0.3"
 # Phase 2: Re-enabled database dependencies
 turso = "0.2.2"
 uuid = { version = "1.0", features = ["v4"] }
@@ -35,7 +36,7 @@ solana-sdk = "^2.1"
 # entropy-api = "0.1.4"
 # entropy-types = "0.0.1"
 # itertools = "0.12.0"
-# ore-api = { path = "../api" }
+ore-api = { path = "../api" }
 # steel = { features = ["spl"], version = "4.0.3" }
 
 # Phase 2: Re-enabled database dependencies
