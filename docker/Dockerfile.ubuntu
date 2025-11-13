@@ -1,0 +1,125 @@
+# syntax=docker/dockerfile:1
+#
+# ORE Ubuntu Container Dockerfile
+# Based on reev project Ubuntu build patterns
+# Designed to replace ARM Mac native compilation with portable Ubuntu builds
+# Supports full ORE stack: Axum + Turso + Solana + ore-api
+#
+
+##########################################
+## 1️⃣ Builder Stage (Ubuntu 20.04)     ##
+##########################################
+
+FROM ubuntu:20.04 AS builder
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV PATH="$PATH:/root/.cargo/bin"
+
+# Install comprehensive build dependencies for Solana, Turso, and OpenSSL
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y \
+    # Basic build tools
+    build-essential \
+    git \
+    curl \
+    ca-certificates \
+    pkg-config \
+    cmake \
+    make \
+    file \
+    # OpenSSL and crypto libraries
+    libssl-dev \
+    libssl1.1 \
+    # Solana dependencies
+    libudev-dev \
+    zlib1g-dev \
+    llvm \
+    clang \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libclang-dev \
+    # Additional system libraries
+    libudev1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- --no-modify-path --profile minimal --default-toolchain stable -y && \
+    rustup component add rustfmt clippy && \
+    rustup target add x86_64-unknown-linux-gnu && \
+    rustup target add x86_64-unknown-linux-musl
+
+WORKDIR /app
+
+##########################################
+## 2️⃣ Build Stage                      ##
+##########################################
+
+# Copy Cargo files first for layer caching
+COPY Cargo.toml Cargo.lock ./
+COPY ingest/Cargo.toml ./ingest/
+COPY api/Cargo.toml ./api/
+
+# Copy source files
+COPY ingest/src ./ingest/src/
+COPY api/src ./api/src/
+
+# Set environment variables for explicit x86_64 targeting
+ENV CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu
+ENV CC="gcc -O2 -ffunction-sections -fdata-sections -fPIC"
+ENV CXX="g++ -O2 -ffunction-sections -fdata-sections -fPIC"
+ENV RUSTFLAGS="-C target-cpu=generic"
+
+# Build application binary with explicit x86_64 targeting
+RUN PROTOC=/usr/bin/protoc \
+    PKG_CONFIG_ALLOW_CROSS=1 \
+    cargo build --release --target x86_64-unknown-linux-gnu \
+    --package ore-ingest \
+    --features api && \
+    echo "=== BINARY INFO ===" && \
+    ls -la /app/target/x86_64-unknown-linux-gnu/release/ore-ingest && \
+    file /app/target/x86_64-unknown-linux-gnu/release/ore-ingest && \
+    echo "=== BINARY SIZE ===" && \
+    du -h /app/target/x86_64-unknown-linux-gnu/release/ore-ingest
+
+##########################################
+## 3️⃣ Runtime Stage (Ubuntu 20.04)     ##
+##########################################
+
+FROM ubuntu:20.04
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y \
+    ca-certificates \
+    curl \
+    libssl1.1 \
+    libudev1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a dedicated non-root user for security
+RUN groupadd -r app && \
+    useradd -r -u 1000 -g app app
+
+WORKDIR /app
+
+# Copy compiled binary from builder stage
+COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/ore-ingest /app/ore-ingest
+
+# Set correct ownership for all application files
+RUN chown -R app:app /app
+
+# Expose the service port
+EXPOSE 3000
+
+# Health check to ensure the API service is responsive
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
+    CMD curl -f http://localhost:3000/ || exit 1
+
+# Run as the non-root user
+USER app
+
+# Default entrypoint
+ENTRYPOINT ["/app/ore-ingest"]
