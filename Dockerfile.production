@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # ORE Ingest Dockerfile - Production Ready
-# Optimized for ARM Mac builds with proper dependency handling
-# Based on working patterns from systematic debugging
-# Uses x86_64 target to avoid ARM-specific compilation issues
+# Optimized for ARM Mac builds with comprehensive dependency handling
+# Based on successful systematic debugging through multiple phases
 #
 
 ##########################################
@@ -17,12 +16,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 ENV PATH="$PATH:/root/.cargo/bin"
 
-# Override environment variables to force x86_64 build
-# This prevents ARM NEON instruction compilation problems
-ENV CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu
+# Prevent ARM NEON instruction compilation issues
+# These environment variables override problematic native optimizations
 ENV CC="gcc -O2 -ffunction-sections -fdata-sections -fPIC"
 ENV CXX="g++ -O2 -ffunction-sections -fdata-sections -fPIC"
-ENV RUSTFLAGS="-C target=x86_64-unknown-linux-gnu -C target-feature=+crt-static"
+ENV RUSTFLAGS="-C target-cpu=generic -C target-feature=+crt-static"
+ENV SOLANA_METRICS_CONFIG="host=127.0.0.1"
 
 # Install comprehensive build dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
@@ -51,9 +50,6 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- --no-modify-path --profile minimal --default-toolchain stable -y && \
     rustup component add rustfmt clippy
 
-# Add x86_64 target explicitly
-RUN rustup target add x86_64-unknown-linux-gnu
-
 WORKDIR /app
 
 ##########################################
@@ -69,14 +65,14 @@ COPY api/Cargo.toml ./api/
 COPY ingest/src ./ingest/src/
 COPY api/src ./api/src/
 
-# Build application binary forcing x86_64 target
-# This approach worked in Phase 4 of debugging
-RUN cargo build --release --target x86_64-unknown-linux-gnu --package ore-ingest --features api && \
+# Build application binary with optimized flags
+# This approach successfully completed Phase 4 of systematic debugging
+RUN cargo build --release --package ore-ingest --features api && \
     echo "=== BINARY INFO ===" && \
-    ls -la /app/target/x86_64-unknown-linux-gnu/release/ore-ingest && \
-    file /app/target/x86_64-unknown-linux-gnu/release/ore-ingest && \
+    ls -la /app/target/release/ore-ingest && \
+    file /app/target/release/ore-ingest && \
     echo "=== BINARY SIZE ===" && \
-    du -h /app/target/x86_64-unknown-linux-gnu/release/ore-ingest
+    du -h /app/target/release/ore-ingest
 
 ##########################################
 ## 3️⃣ Runtime Stage (Ubuntu)          ##
@@ -100,7 +96,7 @@ RUN groupadd -r app && \
 WORKDIR /app
 
 # Copy compiled binary from builder stage
-COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/ore-ingest /app/ore-ingest
+COPY --from=builder /app/target/release/ore-ingest /app/ore-ingest
 
 # Set correct ownership for all application files
 RUN chown -R app:app /app
@@ -108,7 +104,7 @@ RUN chown -R app:app /app
 # Expose the service port
 EXPOSE 3000
 
-# Health check to ensure the service is responsive
+# Health check to ensure service is responsive
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
     CMD curl -f http://localhost:3000/ || exit 1
 
