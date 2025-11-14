@@ -116,6 +116,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
 # Run as the non-root user
 USER app
 
-# Default entrypoint with PORT environment variable
+# Default entrypoint with environment variables
 ENV PORT=4000
-ENTRYPOINT ["/app/ore-ingest"]
+ENV TURSO_URL=/app/data/ore.db
+ENTRYPOINT ["/app/ore-ingest", "--mode", "api"]

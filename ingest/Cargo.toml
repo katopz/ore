@@ -11,7 +11,7 @@ keywords = ["ore", "solana", "turso", "ingestion"]
 [features]
 # Phase 1: Simplified features
 default = ["api"]
-api = ["dep:axum"]
+api = ["dep:axum", "dep:tower-http", "dep:clap"]
 cli = ["dep:clap"]
 
 [dependencies]
@@ -27,6 +27,13 @@ backtrace = "0.3"
 turso = "0.2.2"
 uuid = { version = "1.0", features = ["v4"] }
 
+# API dependencies
+tower-http = { version = "0.6", features = ["cors"], optional = true }
+clap = { version = "4.0", features = ["derive"], optional = true }
+
+# Required for API features
+steel = { features = ["spl"], version = "4.0.3" }
+
 # Phase 3: Re-enabled Solana dependencies
 solana-account-decoder = "^2.1"
 solana-client = "^2.1"
@@ -37,12 +44,10 @@ solana-sdk = "^2.1"
 # entropy-types = "0.0.1"
 # itertools = "0.12.0"
 ore-api = { path = "../api" }
-# steel = { features = ["spl"], version = "4.0.3" }
 
 # Phase 2: Re-enabled database dependencies
 # turso = "0.2.2"  # Already defined above
 # uuid = { version = "1.0", features = ["v4"] }  # Already defined above
 
-# Optional API dependencies
-clap = { version = "4.0", features = ["derive"], optional = true }
-# tower-http = { version = "0.6", features = ["cors"], optional = true }
+# Optional API dependencies - tower-http already defined above
+# clap = { version = "4.0", features = ["derive"], optional = true }  # Already defined above
