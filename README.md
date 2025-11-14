@@ -30,7 +30,7 @@ Command-line interface for local development:
 ### Quick Start
 
 ```bash
-# Build the image
+# Build image (optimized for production)
 docker build -t ore-ingest .
 
 # Run API server (default mode)
@@ -41,9 +41,18 @@ docker run -d \
   -e TURSO_URL=/app/data/ore.db \
   ore-ingest
 
-# Test the API
+# Test API
 curl http://localhost:4000/
 ```
+
+### Image Size Optimization
+
+| Base Image | Size | Build Time | Compatibility | Status |
+|------------|------|------------|-------------|---------|
+| Ubuntu 20.04 | 127MB | ~3 min | ✅ Excellent | Recommended |
+| Alpine Linux | 52.6MB | ~2 min | ⚠️ Linking Issues | Experimental |
+
+**Recommendation**: Use the default Ubuntu-based Dockerfile for production. While Alpine is smaller, it has dynamic linking issues with cross-compilation on ARM Mac.
 
 ### Environment Variables
 
@@ -290,6 +299,16 @@ cargo build --release
 rustup update
 rustc --version
 ```
+
+### Docker Image Comparison
+
+| Image | Size | Status | Use Case |
+|-------|------|--------|-----------|
+| `ore-ingest:latest` | 127MB | ✅ Production ready |
+| `ore-ingest:alpine` | 52.6MB | ⚠️ Development only |
+| `ore-ingest:slim` | 127MB | ✅ Alternative production |
+
+**Note**: Alpine builds are smaller but may have runtime issues on ARM Mac due to dynamic linking. Ubuntu builds are more reliable for production deployment.
 
 #### Runtime Errors
 
