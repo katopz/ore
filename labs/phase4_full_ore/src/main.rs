@@ -8,6 +8,15 @@ use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
+// ORE API imports
+use bincode;
+use itertools::Itertools;
+use ore_api::prelude::*;
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::commitment_config::CommitmentConfig;
+use spl_associated_token_account;
+
+
 // In-memory database
 type MemoryDB = Arc<Mutex<Vec<Record>>>;
 
@@ -31,13 +40,13 @@ async fn main() {
     // Initialize in-memory database
     let db = MemoryDB::new(Mutex::new(Vec::new()));
 
-    // Initialize Solana URL (using devnet)
-    let solana_url = "https://api.devnet.solana.com".to_string();
+    // Initialize Solana URL (using mainnet for ORE)
+    let solana_url = "https://api.mainnet-beta.solana.com".to_string();
     println!("✅ Solana URL configured: {}", solana_url);
 
-    // Initialize ORE program ID (using System Program as valid placeholder)
-    let ore_program_id = "11111111111111111111111111111111".to_string();
-    println!("✅ ORE program ID configured (using System Program as placeholder): {}", ore_program_id);
+    // Initialize ORE program ID
+    let ore_program_id = ore_api::id().to_string();
+    println!("✅ ORE program ID configured: {}", ore_program_id);
 
     let app_state = AppState { db, solana_url, ore_program_id };
 
@@ -48,12 +57,12 @@ async fn main() {
         .route("/db/list", get(list_records))
         .route("/solana/info", get(solana_info))
         .route("/solana/balance/{pubkey}", get(get_balance))
-        .route("/ore/info", get(ore_info))
-        .route("/ore/balance/{pubkey}", get(get_ore_balance))
+        .route("/ore/rounds", get(get_rounds))
+        .route("/ore/winner", get(get_round_winner))
         .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("🚀 Phase 4 server (axum + memory-db + solana + ore) listening on http://0.0.0.0:3000");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3002").await.unwrap();
+    println!("🚀 Phase 4 server (axum + memory-db + solana + ore) listening on http://0.0.0.0:3002");
 
     axum::serve(listener, app).await.unwrap();
 }
@@ -163,58 +172,140 @@ async fn get_balance(State(state): State<AppState>, axum::extract::Path(pubkey):
     }
 }
 
-async fn ore_info(State(state): State<AppState>) -> Json<Value> {
-    let client = solana_client::rpc_client::RpcClient::new(&state.solana_url);
+async fn get_rounds(State(state): State<AppState>) -> Json<Value> {
+    // Create RPC client on demand
+    let rpc = RpcClient::new_with_commitment(
+        state.solana_url.clone(),
+        CommitmentConfig::confirmed(),
+    );
 
-    match state.ore_program_id.parse::<solana_sdk::pubkey::Pubkey>() {
-        Ok(program_pubkey) => {
-            match client.get_account(&program_pubkey) {
-                Ok(account) => Json(json!({
-                    "success": true,
-                    "program_id": state.ore_program_id,
-                    "program_owner": account.owner.to_string(),
-                    "program_lamports": account.lamports,
-                    "program_executable": account.executable,
-                    "program_data": account.data.len(),
-                    "note": "Mock ORE info - actual ORE API when dependency conflicts resolved"
-                })),
+    // Get current board info
+    let board_pda = board_pda();
+    match rpc.get_account(&board_pda.0) {
+        Ok(board_account) => {
+            match bincode::deserialize::<Board>(&board_account.data) {
+                Ok(board) => {
+                    // Get current slot to check if round is active
+                    match rpc.get_account_data(&solana_sdk::sysvar::clock::ID) {
+                        Ok(clock_data) => {
+                            match bincode::deserialize::<solana_sdk::clock::Clock>(&clock_data) {
+                                Ok(clock) => {
+                                    Json(json!({
+                                        "success": true,
+                                        "program_id": state.ore_program_id,
+                                        "board_pda": board_pda.0.to_string(),
+                                        "current_round_id": board.round_id,
+                                        "start_slot": board.start_slot,
+                                        "end_slot": board.end_slot,
+                                        "current_slot": clock.slot,
+                                        "round_active": clock.slot >= board.start_slot && clock.slot <= board.end_slot,
+                                        "program_account_size": board_account.data.len()
+                                    }))
+                                }
+                                Err(e) => Json(json!({
+                                    "success": false,
+                                    "error": format!("Failed to deserialize clock: {}", e),
+                                    "program_id": state.ore_program_id
+                                }))
+                            }
+                        }
+                        Err(e) => Json(json!({
+                            "success": false,
+                            "error": format!("Failed to get clock data: {}", e),
+                            "program_id": state.ore_program_id
+                        }))
+                    }
+                }
                 Err(e) => Json(json!({
                     "success": false,
-                    "error": e.to_string(),
-                    "program_id": state.ore_program_id,
-                    "note": "Expected error on devnet - ORE program may not be deployed"
+                    "error": format!("Failed to deserialize board: {}", e),
+                    "program_id": state.ore_program_id
                 }))
             }
         }
         Err(e) => Json(json!({
             "success": false,
-            "error": format!("Invalid ORE program ID: {}", e),
+            "error": format!("Failed to get board account: {}", e),
             "program_id": state.ore_program_id
         }))
     }
 }
 
-async fn get_ore_balance(State(state): State<AppState>, axum::extract::Path(pubkey): axum::extract::Path<String>) -> Json<Value> {
-    // Parse user public key
-    match pubkey.parse::<solana_sdk::pubkey::Pubkey>() {
-        Ok(user_pubkey) => {
-            // Mock ORE balance query (replace with actual ORE API when dependency conflicts resolved)
+async fn get_round_winner(State(state): State<AppState>) -> Json<Value> {
+    // Create RPC client on demand
+    let rpc = RpcClient::new_with_commitment(
+        state.solana_url.clone(),
+        CommitmentConfig::confirmed(),
+    );
+
+    // Get all program accounts
+    let program_id = ore_api::id();
+    match rpc.get_program_accounts(&program_id) {
+        Ok(accounts) => {
+            // Look specifically for round accounts
+            let mut round_accounts = Vec::new();
+            for (pubkey, account) in &accounts {
+                if account.data.len() == std::mem::size_of::<Round>() {
+                    if let Ok(round) = bincode::deserialize::<Round>(&account.data) {
+                        round_accounts.push((pubkey, round));
+                    }
+                }
+            }
+
+            if round_accounts.is_empty() {
+                return Json(json!({
+                    "success": false,
+                    "error": "No round accounts found",
+                    "message": "They appear to be cleaned up after expiration. To find winner information, you need to check rounds BEFORE they expire.",
+                    "total_accounts": accounts.len()
+                }));
+            }
+
+            // Sort by round ID
+            round_accounts.sort_by_key(|(_, round)| round.id);
+
+            let mut results = Vec::new();
+            for (pubkey, round) in &round_accounts {
+                let mut round_info = json!({
+                    "round_id": round.id,
+                    "pubkey": pubkey.to_string(),
+                    "top_miner": round.top_miner.to_string(),
+                    "top_miner_reward": round.top_miner_reward,
+                    "total_deployed": round.total_deployed,
+                    "total_winnings": round.total_winnings,
+                    "expires_at": round.expires_at
+                });
+
+                // Get the random number and winning square if finalized
+                if let Some(rng) = round.rng() {
+                    let winning_square_index = round.winning_square(rng);
+                    let is_split_reward = round.is_split_reward(rng);
+                    let did_hit_motherlode = round.did_hit_motherlode(rng);
+
+                    round_info["winning_square_index"] = json!(winning_square_index);
+                    round_info["winning_square_row"] = json!(winning_square_index / 5 + 1);
+                    round_info["winning_square_col"] = json!(winning_square_index % 5 + 1);
+                    round_info["split_reward"] = json!(is_split_reward);
+                    round_info["motherlode_hit"] = json!(did_hit_motherlode);
+                } else {
+                    round_info["status"] = json!("not_finalized");
+                    round_info["note"] = json!("No slot hash yet");
+                }
+
+                results.push(round_info);
+            }
+
             Json(json!({
                 "success": true,
-                "pubkey": pubkey,
-                "note": "Mock ORE balance - dependency conflicts need resolution",
-                "mock_balance": 1000000000,
-                "mock_balance_formatted": "1.0 ORE",
-                "unit": "ORE",
-                "program_id": state.ore_program_id
+                "round_count": round_accounts.len(),
+                "total_program_accounts": accounts.len(),
+                "rounds": results
             }))
         }
-        Err(e) => {
-            Json(json!({
-                "success": false,
-                "error": format!("Invalid public key: {}", e),
-                "pubkey": pubkey
-            }))
-        }
+        Err(e) => Json(json!({
+            "success": false,
+            "error": format!("Failed to get program accounts: {}", e),
+            "program_id": state.ore_program_id
+        }))
     }
 }
