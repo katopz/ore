@@ -11,8 +11,8 @@ keywords = ["ore", "solana", "turso", "ingestion"]
 [features]
 # Phase 1: Simplified features
 default = ["api"]
-api = ["dep:axum", "dep:tower-http"]
-cli = ["dep:clap"]
+api = ["dep:axum", "dep:tower-http"]  # Web API server for production deployment
+cli = ["dep:clap"]                     # CLI interface for local testing and development
 
 [dependencies]
 anyhow = "1.0"

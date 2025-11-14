@@ -3,17 +3,15 @@ use anyhow::Result;
 #[cfg(feature = "api")]
 mod api;
 mod blockchain;
+#[cfg(feature = "cli")]
+mod cli;
 mod database;
 mod ingest;
 mod types;
 
-#[cfg(not(feature = "api"))]
-mod cli;
-
 // clap only needed for CLI mode, not API mode
 
 #[cfg(feature = "api")]
-/// Main function with API features enabled
 #[tokio::main]
 async fn main() -> Result<()> {
     // API mode - use environment variables for configuration
@@ -25,9 +23,14 @@ async fn main() -> Result<()> {
     api::run_api_server(port).await
 }
 
-#[cfg(not(feature = "api"))]
-/// Main function without API features
+#[cfg(feature = "cli")]
 #[tokio::main]
 async fn main() -> Result<()> {
     cli::run_ingestion().await
 }
+
+#[cfg(all(not(feature = "api"), not(feature = "cli")))]
+compile_error!("Must specify either 'api' or 'cli' feature");
+
+#[cfg(all(feature = "api", feature = "cli"))]
+compile_error!("Cannot enable both 'api' and 'cli' features simultaneously");
