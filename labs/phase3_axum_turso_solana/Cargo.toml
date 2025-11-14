@@ -15,6 +15,7 @@ serde_json = "1.0"
 # Phase 2: Database dependencies
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+turso = "0.2.2"
 
 # Phase 3: Solana dependencies
 solana-account-decoder = "^2.1"
