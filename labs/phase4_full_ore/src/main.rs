@@ -61,8 +61,8 @@ async fn main() {
         .route("/ore/winner", get(get_round_winner))
         .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3002").await.unwrap();
-    println!("🚀 Phase 4 server (axum + memory-db + solana + ore) listening on http://0.0.0.0:3002");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3005").await.unwrap();
+    println!("🚀 Phase 4 server (axum + memory-db + solana + ore) listening on http://0.0.0.0:3005");
 
     axum::serve(listener, app).await.unwrap();
 }
