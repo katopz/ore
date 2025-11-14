@@ -1,7 +1,7 @@
-use anyhow::Result;
 use crate::blockchain::BlockchainClient;
 use crate::database::Database;
 use crate::ingest::IngestOrchestrator;
+use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::signal;
@@ -41,7 +41,7 @@ fn kill_database_processes() {
 
 /// Run the ingestion process with graceful shutdown
 pub async fn run_ingestion() -> Result<()> {
-    let db_url = std::env::var("TURSO_URL").unwrap_or_else(|_| "ore_rounds.db".to_string());
+    let db_url = std::env::var("TURSO_URL").unwrap_or_else(|_| "ore.db".to_string());
     let rpc_url = std::env::var("SOLANA_RPC")
         .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
 

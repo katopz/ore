@@ -168,7 +168,7 @@ pub async fn start_api_server(db_url: String, port: u16) -> Result<(), Box<dyn s
 
 /// Run the API server with graceful shutdown
 pub async fn run_api_server(port: u16) -> anyhow::Result<()> {
-    let db_url = std::env::var("TURSO_URL").unwrap_or_else(|_| "ore_rounds.db".to_string());
+    let db_url = std::env::var("TURSO_URL").unwrap_or_else(|_| "ore.db".to_string());
     let shutdown_signal = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let shutdown_signal_clone = std::sync::Arc::clone(&shutdown_signal);
 
