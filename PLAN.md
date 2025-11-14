@@ -62,8 +62,11 @@
 **Working Dockerfile Pattern**:
 ```dockerfile
 # Force x86_64 platform for build stage
+FROM --platform=${BUILD_PLATFORM} lukemathwalker/cargo-chef:0.1.72-rust-1.88.0-slim-bullseye AS chef
+# Use cargo-chef for optimized builds with Turso dependencies
 FROM --platform=linux/amd64 ubuntu:20.04 AS builder
-# Native compilation (no --target needed)
+# Native compilation with cargo-chef optimization
+RUN cargo chef cook --release --recipe-path recipe.json
 RUN cargo build --release
 
 # Force x86_64 platform for runtime stage  
@@ -73,16 +76,18 @@ FROM --platform=linux/amd64 ubuntu:20.04
 ### Phase 2: Add Database Layer ✅ COMPLETE
 **Goal**: Add Turso/SQLite to working Phase 1 setup
 **Method**:
-- Extend Phase 1 project with turso dependency
-- Test database connection and table creation
+- Extend Phase 1 project with turso dependency (updated to 0.2.2)
+- Test database connection and table creation with real SQLite
+- Fix Turso API usage for proper parameter passing and row iteration
 - Verify no cross-compilation issues
 
 **Results**: ✅ SUCCESS
-- ✅ Build completes successfully (~38 seconds with cached dependencies)
-- ✅ In-memory database operations work correctly
-- ✅ CREATE and LIST API endpoints functional
-- ✅ JSON API responses working
+- ✅ Build completes successfully (~239 seconds for container with Turso 0.2.2)
+- ✅ Real Turso SQLite database operations work correctly
+- ✅ CREATE and LIST API endpoints functional with SQL queries
+- ✅ JSON API responses working with proper database persistence
 - ✅ Container runtime stable
+- ✅ All endpoints tested and verified: health, status, db/create, db/list
 
 ### Phase 3: Add Solana Integration ✅ COMPLETE
 **Goal**: Add Solana SDK to working Phase 2 setup
@@ -96,8 +101,10 @@ FROM --platform=linux/amd64 ubuntu:20.04
 - ✅ Solana client connects to devnet successfully
 - ✅ Balance queries return valid data (tested with known addresses)
 - ✅ Error handling works (invalid addresses properly rejected)
-- ✅ All API endpoints functional: `/solana/info`, `/solana/balance/{pubkey}`
-- ✅ Container runs stable with platform forcing
+- ✅ All API endpoints functional: `/`, `/status`, `/db/create`, `/db/list`, `/solana/info`, `/solana/balance/{pubkey}`
+- ✅ Real Turso SQLite database integration working (turso 0.2.2)
+- ✅ Container runs stable with platform forcing (~239 seconds build time)
+- ✅ Database persistence verified with CREATE and LIST operations
 
 ### Phase 4: Complete ORE Integration ❌ FAILED
 **Goal**: Add ore-api to working Phase 3 setup
@@ -203,11 +210,13 @@ docker rm -f phaseX-test
 - ✅ Database operations work via API endpoints
 
 ### Phase 3 Success Criteria  
-- ✅ All Phase 2 criteria
+- ✅ All Phase 2 criteria (now with real Turso database)
 - ✅ Solana client connects to devnet
 - ✅ Balance queries return valid data (271.606553784 SOL for System Program)
 - ✅ Solana operations work without crashing
 - ✅ Error handling for invalid addresses works correctly
+- ✅ Real database persistence with Turso SQLite
+- ✅ All API endpoints functional: health, status, db/create, db/list, solana/info, solana/balance
 
 ### Phase 4 Success Criteria
 - ✅ ORE API integration: SUCCESS - real ORE API calls working locally
@@ -323,12 +332,14 @@ If any phase fails:
 - ❌ Containerization approach reaches its limits at ORE integration
 
 **PHASE 3 TEST RESULTS**:
-- ✅ Health endpoint: `/` returns proper JSON with Solana info
-- ✅ Status endpoint: `/status` shows all systems ready
-- ✅ Database operations: CREATE and LIST working
+- ✅ Health endpoint: `/` returns proper JSON with Turso + Solana info
+- ✅ Status endpoint: `/status` shows Turso database connected
+- ✅ Database operations: CREATE and LIST working with real Turso SQLite persistence
 - ✅ Solana info: `/solana/info` returns latest blockhash
 - ✅ Balance query: `/solana/balance/{pubkey}` returns lamports and SOL
 - ✅ Error handling: Invalid addresses properly rejected
+- ✅ Docker container: Builds and runs successfully with Turso 0.2.2
+- ✅ Local development: cargo check/run working with real database
 
 **PHASE 4 TEST RESULTS**:
 - ❌ ORE integration: FAILED - dependency conflicts prevent compilation
