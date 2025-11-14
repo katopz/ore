@@ -92,7 +92,7 @@ RUN groupadd -r app && \
 WORKDIR /app
 
 # Copy the compiled binary from the builder stage
-COPY --from=builder /app/target/release/phase3-axum-turso-solana /app/phase3-server
+COPY --from=builder /app/target/release/phase4-full-ore /app/phase4-server
 
 # Set correct ownership for all application files
 RUN chown -R app:app /app
@@ -108,4 +108,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
 USER app
 
 # Default entrypoint
-ENTRYPOINT ["/app/phase3-server"]
+ENTRYPOINT ["/app/phase4-server"]

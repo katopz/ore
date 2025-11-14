@@ -1,0 +1,40 @@
+#!/bin/bash
+set -e
+echo "🧪 Phase 3: Axum + Memory DB + Solana (cargo-chef optimized)"
+echo "Building with platform=linux/amd64..."
+docker build --platform=linux/amd64 -t phase3-test . || { echo "Build failed"; exit 1; }
+echo ""
+echo "Running container..."
+docker run -d --name phase3-test -p 3000:3000 phase3-test
+echo "Waiting 8 seconds..."
+sleep 8
+echo ""
+echo "Testing endpoints:"
+echo "=== Health Check ==="
+curl -s http://localhost:3000/ || echo "Health endpoint FAILED"
+echo ""
+echo "=== Status Check ==="  
+curl -s http://localhost:3000/status || echo "Status endpoint FAILED"
+echo ""
+echo "=== Solana Info ==="
+curl -s http://localhost:3000/solana/info || echo "Solana info endpoint FAILED"
+echo ""
+echo "=== Database: Create Record ==="
+curl -s -X POST http://localhost:3000/db/create || echo "Create record FAILED"
+echo ""
+echo "=== Database: List Records ==="
+curl -s http://localhost:3000/db/list || echo "List records FAILED"
+echo ""
+echo "=== Solana Balance (System Program) ==="
+curl -s http://localhost:3000/solana/balance/11111111111111111111111111111111 || echo "Balance query FAILED"
+echo ""
+echo "=== Solana Balance (Invalid Pubkey) ==="
+curl -s http://localhost:3000/solana/balance/invalid || echo "Invalid pubkey test FAILED"
+echo ""
+echo "Container logs:"
+docker logs phase3-test
+echo ""
+echo "Cleaning up..."
+docker rm -f phase3-test
+echo ""
+echo "✅ Phase 3 Test Complete"

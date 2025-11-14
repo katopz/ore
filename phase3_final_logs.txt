@@ -1,0 +1,2 @@
+✅ Solana URL configured: https://api.devnet.solana.com
+🚀 Phase 3 server (axum + memory-db + solana) listening on http://0.0.0.0:3000
