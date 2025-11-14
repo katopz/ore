@@ -122,6 +122,7 @@ impl Database {
         Ok(())
     }
 
+    #[cfg(feature = "api")]
     /// List rounds with pagination
     pub async fn list_rounds(&self, limit: Option<i64>) -> Result<Vec<RoundWinner>> {
         let limit = limit.unwrap_or(100); // Default to 100
@@ -168,6 +169,7 @@ impl Database {
         Ok(rounds)
     }
 
+    #[cfg(feature = "api")]
     /// Get total count of rounds in database
     pub async fn get_rounds_count(&self) -> Result<i64> {
         let mut rows = self

@@ -22,6 +22,7 @@ pub struct RoundWinner {
     pub created_at: DateTime<Utc>, // When we recorded this
 }
 
+#[cfg(feature = "api")]
 /// API response for list endpoint
 #[derive(Debug, Serialize)]
 pub struct RoundListResponse {
@@ -30,12 +31,14 @@ pub struct RoundListResponse {
     pub limit: i64,
 }
 
+#[cfg(feature = "api")]
 /// API error response
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub error: String,
 }
 
+#[cfg(feature = "api")]
 impl ErrorResponse {
     pub fn new(message: &str) -> Self {
         Self {
