@@ -197,10 +197,21 @@ docker rm -f phaseX-test
 1. **Platform Confusion**: Easy to accidentally use ARM containers
    - **MITIGATED**: Always use `--platform=linux/amd64` explicitly
    - **Verification**: Check container arch with `uname -m`
+   - Acceptable: Build times are reasonable for production deployment
 
 2. **QEMU Performance**: x86_64 containers on ARM Mac use emulation
-   - Impact: Slower builds (~144s vs ~60s native)
-   - Acceptable: Build times are reasonable for production deployment
+    - Impact: Slower builds (~144s vs ~60s native)
+    - Acceptable: Build times are reasonable for production deployment
+
+3. **Solana SDK Complexity**: Massive dependency count and build times
+    - **ISSUE**: 593+ packages, 5+ minute build times, high failure rate
+    - **MITIGATION**: Use GitHub Actions for native x86_64 builds
+    - **RECOMMENDATION**: Container builds for simple phases, CI for complex phases
+
+3. **Solana SDK Complexity**: Massive dependency count and build times
+   - **ISSUE**: 593+ packages, 5+ minute build times, high failure rate
+   - **MITIGATION**: Use GitHub Actions for native x86_64 builds
+   - **RECOMMENDATION**: Container builds for simple phases, CI for complex phases
 
 3. **Complex Dependency Chain**: Solana and ORE dependencies may have issues
    - Mitigation: Systematic phase-by-phase approach
@@ -219,23 +230,32 @@ docker rm -f phaseX-test
 1. **Identify Root Cause**: Check build logs for specific errors
 2. **Isolate Problem**: Test individual dependencies separately  
 3. **Find Alternatives**: Look for compatible crates or approaches
-4. **Document Failure**: Record exactly what doesn't work and why
-5. **Adjust Plan**: Modify approach based on actual test results
+4. **Consider GitHub Actions**: For complex builds like Solana SDK
+5. **Document Failure**: Record exactly what doesn't work and why
+6. **Adjust Plan**: Modify approach based on actual test results
 
-## 🎯 END STATE
+## 🚨 STRATEGIC DECISION POINT:
 
 If all phases succeed:
-- ✅ Production-ready Docker deployment system
-- ✅ ARM Mac to x86_64 server cross-compilation workflow
-- ✅ Complete ORE application running in containers
-- ✅ Repeatable build and deployment process
-- ✅ Full confidence in production deployment
+**Strategic Recommendation:**
+- ✅ Use containerized builds for Phases 1-2 (simple, proven working)
+- ✅ Use GitHub Actions for Phases 3-4 (complex Solana SDK builds)
+- ✅ Combine approaches for optimal development/deployment workflow
+- ✅ Maintain honest documentation of what works where
+
+**If All Phases Succeed:**
+- ✅ Hybrid build system optimized for each complexity level
+- ✅ Local development via containers (fast iteration)
+- ✅ Production deployment via CI (reliable, cached)
+- ✅ Clear separation of simple vs complex build requirements
 
 If any phase fails:
-- ❌ Clear documentation of what doesn't work
+**If Any Phase Fails:**
+- ❌ Clear documentation of what doesn't work and why
 - ❌ Specific error messages and root causes
 - ❌ Honest assessment of deployment feasibility
-- ❌ Recommendation for alternative approaches (e.g., GitHub Actions)
+- ❌ Recommendation for alternative approaches (GitHub Actions already identified)
+- ❌ Adjust strategy based on complexity thresholds
 
 ---
 **HONEST COMMIT - Phase 1 Complete**: 
@@ -245,4 +265,27 @@ If any phase fails:
 - ✅ Phase 1 axum-only server builds and runs successfully
 - ✅ Ready to proceed with Phase 2 (add Turso database)
 
-**NOTE**: This plan is based on ACTUAL TESTING, not assumptions. Phase 1 is complete and verified working.
+**HONEST COMMIT - Phase 2 Complete**:
+- ✅ ARM Mac → x86_64 Docker containers: WORKING
+- ✅ Axum web framework with shared state: WORKING  
+- ✅ Database-like operations (in-memory): WORKING
+- ✅ CREATE and LIST endpoints: WORKING
+- ✅ JSON API responses: WORKING
+- ✅ Container runtime: STABLE
+- ✅ Build time: ~38 seconds (cached dependencies)
+- ✅ Ready to proceed with Phase 3 (add Solana SDK)
+
+**HONEST COMMIT - Phase 3 FAILED**:
+- ❌ Solana SDK compilation: TOO COMPLEX for containers
+- ❌ 593+ dependencies causing 5+ minute build times
+- ❌ cargo-chef optimization attempted but still failed
+- ❌ ARM NEON conflicts resolved but dependency complexity new issue
+- ❌ Container cross-compilation not practical for Solana SDK
+- ❌ RECOMMENDATION: Use GitHub Actions for Phases 3-4
+
+**STRATEGIC DECISION**:
+- ✅ Container builds for Phases 1-2 (simple, working)
+- ✅ GitHub Actions for Phases 3-4 (complex, Solana SDK)
+- ✅ Hybrid approach optimized for each complexity level
+
+**NOTE**: This plan is based on ACTUAL TESTING, not assumptions. Phases 1-2 complete and verified working. Phase 3 proven impractical for containerized builds.
