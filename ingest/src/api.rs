@@ -201,12 +201,12 @@ fn kill_database_processes() {
 
     // Kill any ore-ingest processes first
     let _ = std::process::Command::new("pkill")
-        .args(&["-f", "ore-ingest"])
+        .args(["-f", "ore-ingest"])
         .output();
 
     // Find and kill processes holding database files
     if let Ok(output) = std::process::Command::new("lsof")
-        .args(&["ore_rounds.db", "ore_rounds.db-wal", "ore_rounds.db-shm"])
+        .args(["ore_rounds.db", "ore_rounds.db-wal", "ore_rounds.db-shm"])
         .output()
     {
         if output.status.success() {
@@ -217,7 +217,7 @@ fn kill_database_processes() {
                     if let Ok(pid) = parts[1].parse::<u32>() {
                         println!("Killing process {} holding database", pid);
                         let _ = std::process::Command::new("kill")
-                            .args(&["-9", &pid.to_string()])
+                            .args(["-9", &pid.to_string()])
                             .output();
                     }
                 }

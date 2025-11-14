@@ -11,7 +11,7 @@ keywords = ["ore", "solana", "turso", "ingestion"]
 [features]
 # Phase 1: Simplified features
 default = ["api"]
-api = ["dep:axum", "dep:tower-http", "dep:clap"]
+api = ["dep:axum", "dep:tower-http"]
 cli = ["dep:clap"]
 
 [dependencies]

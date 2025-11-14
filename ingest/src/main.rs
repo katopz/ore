@@ -1,5 +1,4 @@
 use anyhow::Result;
-use axum::Router;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -13,45 +12,19 @@ use api::AppState;
 use blockchain::BlockchainClient;
 use database::Database;
 
-#[cfg(feature = "api")]
-use clap::{Arg, Command};
+// clap only needed for CLI mode, not API mode
 
 #[cfg(feature = "api")]
 /// Main function with API features enabled
 #[tokio::main]
 async fn main() -> Result<()> {
-    let matches = Command::new("ore-ingest")
-        .version("0.1.0")
-        .about("ORE round winner data ingestion service")
-        .arg(
-            Arg::new("mode")
-                .short('m')
-                .long("mode")
-                .value_name("MODE")
-                .help("Run mode: 'cli' or 'api'")
-                .default_value("api"),
-        )
-        .arg(
-            Arg::new("port")
-                .short('p')
-                .long("port")
-                .value_name("PORT")
-                .help("Port for API server (only used in api mode)")
-                .default_value("4000"),
-        )
-        .get_matches();
+    // API mode - use environment variables for configuration
+    let port: u16 = std::env::var("PORT")
+        .unwrap_or_else(|_| "4000".to_string())
+        .parse()
+        .unwrap_or(4000);
 
-    let mode = matches.get_one::<String>("mode").unwrap();
-    let port: u16 = matches.get_one::<String>("port").unwrap().parse()?;
-
-    match mode.as_str() {
-        "api" => run_api_server(port).await,
-        "cli" => run_ingestion().await,
-        _ => {
-            eprintln!("Invalid mode. Use 'cli' or 'api'");
-            Ok(())
-        }
-    }
+    run_api_server(port).await
 }
 
 #[cfg(not(feature = "api"))]
