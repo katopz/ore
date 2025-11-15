@@ -1,0 +1,369 @@
+# syntax=docker/dockerfile:1
+# ORE Alpine Dockerfile - build without Solana dependencies to isolate segfault issue
+
+FROM rust:1.88.0-alpine AS builder
+
+# Install build dependencies for Alpine
+RUN apk update && \
+    apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig \
+    protobuf-dev \
+    build-base \
+    cmake \
+    git \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy the actual ORE project
+COPY Cargo.toml Cargo.lock ./
+COPY ingest/Cargo.toml ./ingest/
+COPY api/Cargo.toml ./api/
+
+# Create modified Cargo.toml for ingest without Solana dependencies
+RUN cat > /app/ingest/Cargo.toml.minimal << 'EOF'
+[package]
+name = "ore-ingest"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+homepage = "https://ore.supply"
+description = "ORE round winner data ingestion to Turso"
+repository = "https://github.com/katopz/ore"
+keywords = ["ore", "solana", "turso", "ingestion"]
+
+[features]
+# Phase 1: Simplified features
+default = ["api"]
+api = ["dep:axum", "dep:tower-http"]  # Web API server for production deployment
+cli = ["dep:clap"]                     # CLI interface for local testing and development
+
+[dependencies]
+anyhow = "1.0"
+# Phase 1: Minimal dependencies only
+axum = { version = "0.8.4", optional = true }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.37.0", features = ["full"] }
+backtrace = "0.3"
+# Phase 2: Re-enabled database dependencies
+turso = "0.2.2"
+uuid = { version = "1.0", features = ["v4"] }
+
+# API dependencies
+tower-http = { version = "0.6", features = ["cors"], optional = true }
+clap = { version = "4.0", features = ["derive"], optional = true }
+
+# Phase 3: DISABLED Solana dependencies for testing
+# solana-account-decoder = "^2.1"
+# solana-client = "^2.1"
+# solana-sdk = "^2.1"
+
+ore-api = { path = "../api" }
+
+# Disable steel crate for now (Solana-related)
+# steel = { features = ["spl"], version = "4.0.3" }
+EOF
+
+# Create directory first, then modified main.rs that doesn't use Solana
+RUN mkdir -p /app/ingest/src
+RUN cat > /app/ingest/src/main.rs << 'EOF'
+use anyhow::Result;
+use std::env;
+
+#[cfg(feature = "api")]
+mod api;
+
+// Commented out modules that depend on Solana
+// mod blockchain;
+#[cfg(feature = "cli")]
+mod cli;
+mod database;
+mod ingest;
+mod types;
+
+#[cfg(feature = "api")]
+#[tokio::main]
+async fn main() -> Result<()> {
+    // API mode - use environment variables for configuration
+    let port: u16 = env::var("PORT")
+        .unwrap_or_else(|_| "4000".to_string())
+        .parse()
+        .unwrap_or(4000);
+
+    println!("🚀 Starting ORE API server on port {}", port);
+    println!("✅ Solana dependencies temporarily disabled for Alpine testing");
+
+    // Start a simple API server without Solana integration
+    api::run_api_server(port).await
+}
+
+#[cfg(feature = "cli")]
+#[tokio::main]
+async fn main() -> Result<()> {
+    println!("🚀 ORE CLI mode - Solana disabled");
+    cli::run_ingestion().await
+}
+
+#[cfg(all(not(feature = "api"), not(feature = "cli")))]
+compile_error!("Must specify either 'api' or 'cli' feature");
+
+#[cfg(all(feature = "api", feature = "cli"))]
+compile_error!("Cannot enable both 'api' and 'cli' features simultaneously");
+EOF
+
+# Copy source files (but use our minimal versions)
+COPY api/src ./api/src/
+COPY ingest/src/database.rs ./ingest/src/
+COPY ingest/src/ingest.rs ./ingest/src/
+COPY ingest/src/types.rs ./ingest/src/
+
+# Create simple database.rs without Solana dependencies
+RUN cat > /app/ingest/src/database.rs << 'EOF'
+use anyhow::Result;
+use turso::Turso;
+use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RoundWinner {
+    pub round_number: u64,
+    pub winner_pubkey: String,
+    pub amount: u64,
+    pub timestamp: DateTime<Utc>,
+}
+
+pub struct Database {
+    client: Turso,
+}
+
+impl Database {
+    pub async fn new(url: &str) -> Result<Self> {
+        let client = Turso::new(url)?;
+        Ok(Self { client })
+    }
+
+    pub async fn init(&self) -> Result<()> {
+        // Simple table creation without Solana-specific fields
+        let query = r#"
+            CREATE TABLE IF NOT EXISTS round_winners (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                round_number INTEGER NOT NULL,
+                winner_pubkey TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                timestamp TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        "#;
+        self.client.execute(query, &[]).await?;
+        Ok(())
+    }
+
+    pub async fn store_winner(&self, winner: &RoundWinner) -> Result<()> {
+        let query = r#"
+            INSERT INTO round_winners (round_number, winner_pubkey, amount, timestamp)
+            VALUES (?, ?, ?, ?)
+        "#;
+        self.client.execute(query, &[
+            &winner.round_number.to_string(),
+            &winner.winner_pubkey,
+            &winner.amount.to_string(),
+            &winner.timestamp.to_rfc3339(),
+        ]).await?;
+        Ok(())
+    }
+}
+EOF
+
+# Create simple ingest.rs
+RUN cat > /app/ingest/src/ingest.rs << 'EOF'
+use anyhow::Result;
+use super::database::Database;
+use chrono::Utc;
+
+pub async fn run_ingestion(db: &Database) -> Result<()> {
+    println!("🎯 Running ingestion without Solana dependencies");
+
+    // Simulate some data ingestion
+    let now = Utc::now();
+    let winners = vec![
+        super::database::RoundWinner {
+            round_number: 1,
+            winner_pubkey: "test_winner_1".to_string(),
+            amount: 1000000,
+            timestamp: now,
+        }
+    ];
+
+    for winner in winners {
+        db.store_winner(&winner).await?;
+        println!("✅ Stored winner for round {}", winner.round_number);
+    }
+
+    Ok(())
+}
+EOF
+
+# Create simple types.rs
+RUN cat > /app/ingest/src/types.rs << 'EOF'
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoundData {
+    pub round: u64,
+    pub winner: String,
+    pub amount: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiResponse<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub error: Option<String>,
+}
+
+impl<T> ApiResponse<T> {
+    pub fn success(data: T) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
+    }
+
+    pub fn error(error: String) -> Self {
+        Self {
+            success: false,
+            data: None,
+            error: Some(error),
+        }
+    }
+}
+EOF
+
+# Create simple lib.rs
+RUN cat > /app/ingest/src/lib.rs << 'EOF'
+pub mod database;
+pub mod ingest;
+pub mod types;
+EOF
+
+# Create simple API module without Solana dependencies
+RUN cat > /app/ingest/src/api.rs << 'EOF'
+use anyhow::Result;
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::Json,
+    routing::{get, post},
+    Router,
+};
+use serde_json::json;
+use std::sync::Arc;
+use tower_http::cors::CorsLayer;
+
+use super::{database::Database, types::ApiResponse};
+
+pub type AppState = Arc<Database>;
+
+pub async fn run_api_server(port: u16) -> Result<()> {
+    // Initialize database
+    let db_url = std::env::var("TURSO_URL").unwrap_or_else(|_| "/app/data/ore.db".to_string());
+    let db = Database::new(&db_url).await?;
+    db.init().await?;
+    let state = Arc::new(db);
+
+    let app = Router::new()
+        .route("/", get(root))
+        .route("/health", get(health))
+        .route("/winners", get(get_winners))
+        .layer(CorsLayer::permissive())
+        .with_state(state);
+
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
+    println!("🌐 Server running on http://0.0.0.0:{}", port);
+
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+
+async fn root() -> Json<serde_json::Value> {
+    Json(json!({
+        "service": "ORE Ingest API",
+        "status": "running",
+        "solana_disabled": true,
+        "platform": std::env::consts::OS
+    }))
+}
+
+async fn health() -> Json<ApiResponse<String>> {
+    ApiResponse::success("healthy".to_string())
+}
+
+async fn get_winners(State(db): State<AppState>) -> Result<Json<ApiResponse<Vec<String>>>, StatusCode> {
+    // Return mock data for now
+    let mock_winners = vec![
+        "test_winner_1".to_string(),
+        "test_winner_2".to_string(),
+    ];
+
+    Ok(Json(ApiResponse::success(mock_winners)))
+}
+EOF
+
+# Build the ORE application without Solana dependencies natively on Alpine
+RUN RUSTFLAGS="-C target-cpu=generic -C opt-level=2" \
+    cargo build --release --package ore-ingest --features api
+
+# Debug: Check the binary properties
+RUN file target/release/ore-ingest && \
+    ls -la target/release/ore-ingest && \
+    ldd target/release/ore-ingest
+
+##########################################
+## Runtime Stage (Alpine, ORE minimal) ##
+##########################################
+
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk update && \
+    apk add --no-cache \
+    ca-certificates \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# Create a dedicated non-root user for security
+RUN addgroup -g 1000 app && \
+    adduser -D -u 1000 -G app app
+
+# Set working directory
+WORKDIR /app
+
+# Copy the compiled binary from the native Alpine builder
+COPY --from=builder /app/target/release/ore-ingest /app/ore-ingest
+
+# Set correct ownership for all application files
+RUN chown -R app:app /app
+
+# Create data directory for database
+RUN mkdir -p /app/data && chown app:app /app/data
+
+# Expose service port
+EXPOSE 4000
+
+# Health check to ensure API service is responsive
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
+    CMD curl -f http://localhost:4000/health || exit 1
+
+# Run as a non-root user
+USER app
+
+# Default entrypoint with environment variables
+ENV PORT=4000
+ENV TURSO_URL=/app/data/ore.db
+
+ENTRYPOINT ["/app/ore-ingest"]

@@ -1,0 +1,69 @@
+# syntax=docker/dockerfile:1
+# Native Alpine Dockerfile - build directly on Alpine to avoid cross-compilation issues
+
+FROM rust:1.88.0-alpine AS builder
+
+# Install build dependencies for Alpine
+RUN apk update && \
+    apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig \
+    protobuf-dev \
+    build-base \
+    cmake \
+    git \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy the actual ORE project
+COPY ../Cargo.toml ../Cargo.lock ./
+COPY ../ingest/Cargo.toml ./ingest/
+COPY ../api/Cargo.toml ./api/
+COPY ../ingest/src ./ingest/src/
+COPY ../api/src ./api/src/
+
+# Build the actual ORE application natively on Alpine
+# Use conservative flags to avoid potential issues
+RUN RUSTFLAGS="-C target-cpu=generic -C opt-level=2" \
+    cargo build --release --package ore-ingest --features api
+
+# Debug: Check the binary properties
+RUN file target/release/ore-ingest && \
+    ls -la target/release/ore-ingest && \
+    ldd target/release/ore-ingest
+
+##########################################
+## Runtime Stage (Alpine, native build) ##
+##########################################
+
+FROM alpine:3.19
+
+# Install only runtime dependencies
+RUN apk update && \
+    apk add --no-cache \
+    ca-certificates \
+    && rm -rf /var/cache/apk/*
+
+# Create a dedicated non-root user for security
+RUN addgroup -g 1000 app && \
+    adduser -D -u 1000 -G app app
+
+# Set working directory
+WORKDIR /app
+
+# Copy the compiled binary from the native Alpine builder
+COPY --from=builder /app/target/release/ore-ingest /app/ore-ingest
+
+# Set correct ownership for all application files
+RUN chown -R app:app /app
+
+# Expose service port (for consistency)
+EXPOSE 4000
+
+# Run as a non-root user
+USER app
+
+# Default entrypoint
+ENTRYPOINT ["/app/ore-ingest"]

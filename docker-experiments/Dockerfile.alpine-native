@@ -1,0 +1,98 @@
+# syntax=docker/dockerfile:1
+# Native Alpine Dockerfile - build directly on Alpine to avoid cross-compilation issues
+
+FROM --platform=linux/amd64 rust:1.88.0-alpine AS builder
+
+# Install build dependencies for Alpine
+RUN apk update && \
+    apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig \
+    protobuf-dev \
+    build-base \
+    cmake \
+    git \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Create minimal Cargo.toml for testing
+COPY <<EOF /app/Cargo.toml
+[package]
+name = "ore-ingest-native"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+tokio = { version = "1.37.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+EOF
+
+# Create minimal main.rs for testing
+COPY <<EOF /app/src/main.rs
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    println!("🎉 Native Alpine Rust app!");
+    println!("🚀 Built directly on Alpine without cross-compilation");
+
+    // Test basic functionality
+    let data = serde_json::json!({
+        "status": "success",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "platform": std::env::consts::OS,
+        "arch": std::env::consts::ARCH
+    });
+
+    println!("📊 Test data: {}", serde_json::to_string_pretty(&data)?);
+    println!("✅ Native Alpine build successful!");
+    Ok(())
+}
+EOF
+
+# Build natively on Alpine (no cross-compilation)
+RUN cargo build --release
+
+# Debug: Check the binary properties
+RUN file target/release/ore-ingest-native && \
+    ls -la target/release/ore-ingest-native && \
+    ldd target/release/ore-ingest-native
+
+##########################################
+## Runtime Stage (Alpine, native build) ##
+##########################################
+
+FROM alpine:3.19
+
+# Install only runtime dependencies
+RUN apk update && \
+    apk add --no-cache \
+    ca-certificates \
+    && rm -rf /var/cache/apk/*
+
+# Create a dedicated non-root user for security
+RUN addgroup -g 1000 app && \
+    adduser -D -u 1000 -G app app
+
+# Set working directory
+WORKDIR /app
+
+# Copy the compiled binary from the native Alpine builder
+COPY --from=builder /app/target/release/ore-ingest-native /app/ore-ingest
+
+# Set correct ownership for all application files
+RUN chown -R app:app /app
+
+# Expose service port (for consistency)
+EXPOSE 4000
+
+# Run as a non-root user
+USER app
+
+# Default entrypoint
+ENTRYPOINT ["/app/ore-ingest"]

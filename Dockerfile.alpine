@@ -81,7 +81,9 @@ RUN ln -s /usr/x86_64-linux-gnu/lib64/ /lib64
 ENV LD_LIBRARY_PATH="/lib64:/usr/x86_64-linux-gnu/lib"
 
 # Add both musl and glibc targets for maximum compatibility
-RUN rustup target add x86_64-unknown-linux-musl x86_64-unknown-linux-gnu
+# Note: x86_64-unknown-linux-musl requires musl-tools for static linking
+RUN rustup target add x86_64-unknown-linux-musl x86_64-unknown-linux-gnu && \
+    rustup component add rust-src
 
 WORKDIR /app
 
@@ -119,9 +121,10 @@ ARG BUILD_PLATFORM
 COPY --from=planner /app/recipe.json recipe.json
 
 # Build to dependencies using to recipe with musl targeting
+# Use conservative flags for dependency building
 RUN PKG_CONFIG_ALLOW_CROSS=1 \
     PROTOC=/usr/bin/protoc \
-    RUSTFLAGS="-C target-cpu=generic" \
+    RUSTFLAGS="-C target-cpu=generic -C opt-level=0" \
     CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
     cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
 
@@ -133,15 +136,15 @@ COPY ingest/src ./ingest/src/
 COPY api/src ./api/src/
 
 # Build to actual application binary with musl target for native Alpine compatibility
-# Add runtime safety flags to prevent segfaults
+# Build debug version to investigate segfault
 RUN PKG_CONFIG_ALLOW_CROSS=1 \
     PROTOC=/usr/bin/protoc \
-    RUSTFLAGS="-C target-cpu=generic -C link-arg=-Wl,--as-needed -C link-arg=-Wl,--gc-sections" \
+    RUSTFLAGS="-C target-cpu=generic -C opt-level=0 -C debuginfo=1" \
     CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
-    cargo build --release --target x86_64-unknown-linux-musl --package ore-ingest --features api
+    cargo build --target x86_64-unknown-linux-musl --package ore-ingest --features api
 
-# Debug: Check the binary properties
-RUN ls -la /app/target/x86_64-unknown-linux-musl/release/ore-ingest
+# Debug: Check the binary properties (debug build)
+RUN ls -la /app/target/x86_64-unknown-linux-musl/debug/ore-ingest
 
 ##########################################
 ## 4️⃣ Runtime Stage (Alpine, native musl)  ##
@@ -149,12 +152,14 @@ RUN ls -la /app/target/x86_64-unknown-linux-musl/release/ore-ingest
 
 FROM --platform=${BUILD_PLATFORM} alpine:3.19
 
-# Install only minimal runtime dependencies for native musl
+# Install additional debugging tools and minimal runtime dependencies for native musl
 RUN apk update && \
     apk add --no-cache \
     ca-certificates \
     curl \
     libgcc \
+    gdb \
+    strace \
     && rm -rf /var/cache/apk/*
 
 # Clean library path for native musl execution
@@ -171,8 +176,8 @@ RUN addgroup -g 1000 app && \
 # Set working directory
 WORKDIR /app
 
-# Copy to compiled binary from the builder stage (musl target)
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/ore-ingest /app/ore-ingest
+# Copy to compiled binary from the builder stage (musl debug target)
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/debug/ore-ingest /app/ore-ingest
 
 # Set correct ownership for all application files
 RUN chown -R app:app /app

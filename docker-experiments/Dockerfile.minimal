@@ -1,0 +1,183 @@
+# syntax=docker/dockerfile:1
+# Minimal Alpine Dockerfile for testing without Solana dependencies
+
+ARG BUILD_PLATFORM=linux/amd64
+ARG TARGETPLATFORM=linux/amd64
+
+##########################################
+## 1️⃣ Chef Stage (cargo-chef)          ##
+##########################################
+
+FROM --platform=${BUILD_PLATFORM} lukemathwalker/cargo-chef:0.1.72-rust-1.88.0-slim-bullseye AS chef
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    make \
+    cmake \
+    libssl-dev \
+    pkg-config \
+    protobuf-compiler \
+    musl-tools \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setup glibc compatibility for cross-compilation
+RUN ln -s /usr/x86_64-linux-gnu/lib64/ /lib64
+ENV LD_LIBRARY_PATH="/lib64:/usr/x86_64-linux-gnu/lib"
+
+# Add musl target
+RUN rustup target add x86_64-unknown-linux-musl && \
+    rustup component add rust-src
+
+WORKDIR /app
+
+##########################################
+## 2️⃣ Planner Stage                   ##
+##########################################
+
+FROM chef AS planner
+
+# Re-declare the ARG for this stage
+ARG BUILD_PLATFORM
+
+# Copy minimal Cargo.toml for testing
+COPY <<EOF /app/Cargo.toml
+[package]
+name = "ore-ingest-minimal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+tokio = { version = "1.37.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+EOF
+
+# Create minimal main.rs for testing
+COPY <<EOF /app/src/main.rs
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    println!("🎉 Minimal Rust app running on Alpine!");
+    println!("🚀 This works without Solana dependencies");
+
+    // Simple async operation
+    let data = serde_json::json!({
+        "status": "success",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "platform": std::env::consts::OS
+    });
+
+    println!("📊 Test data: {}", serde_json::to_string_pretty(&data)?);
+    Ok(())
+}
+EOF
+
+# Prepare recipe for building dependencies
+RUN cargo chef prepare --recipe-path recipe.json
+
+##########################################
+## 3️⃣ Builder Stage                    ##
+##########################################
+
+FROM chef AS builder
+
+# Re-declare the ARG for this stage
+ARG BUILD_PLATFORM
+
+# Copy the recipe from planner stage
+COPY --from=planner /app/recipe.json recipe.json
+
+# Build dependencies with musl targeting
+RUN PKG_CONFIG_ALLOW_CROSS=1 \
+    PROTOC=/usr/bin/protoc \
+    RUSTFLAGS="-C target-cpu=generic -C opt-level=0" \
+    CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
+    cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
+
+# Copy the actual source code
+COPY <<EOF /app/Cargo.toml
+[package]
+name = "ore-ingest-minimal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+tokio = { version = "1.37.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+EOF
+
+COPY <<EOF /app/src/main.rs
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    println!("🎉 Minimal Rust app running on Alpine!");
+    println!("🚀 This works without Solana dependencies");
+
+    // Simple async operation
+    let data = serde_json::json!({
+        "status": "success",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "platform": std::env::consts::OS
+    });
+
+    println!("📊 Test data: {}", serde_json::to_string_pretty(&data)?);
+    Ok(())
+}
+EOF
+
+# Build the minimal application binary with musl target
+RUN PKG_CONFIG_ALLOW_CROSS=1 \
+    PROTOC=/usr/bin/protoc \
+    RUSTFLAGS="-C target-cpu=generic -C opt-level=0 -C debuginfo=1" \
+    CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
+    cargo build --target x86_64-unknown-linux-musl --package ore-ingest-minimal
+
+# Debug: Check the binary properties
+RUN ls -la /app/target/x86_64-unknown-linux-musl/debug/ore-ingest-minimal
+
+##########################################
+## 4️⃣ Runtime Stage (Alpine, minimal)  ##
+##########################################
+
+FROM --platform=${BUILD_PLATFORM} alpine:3.19
+
+# Install only minimal runtime dependencies
+RUN apk update && \
+    apk add --no-cache \
+    ca-certificates \
+    && rm -rf /var/cache/apk/*
+
+# Clean library path for native musl execution
+ENV LD_LIBRARY_PATH="/lib:/usr/lib"
+
+# Create a dedicated non-root user for security
+RUN addgroup -g 1000 app && \
+    adduser -D -u 1000 -G app app
+
+# Set working directory
+WORKDIR /app
+
+# Copy the compiled binary from the builder stage (musl debug target)
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/debug/ore-ingest-minimal /app/ore-ingest
+
+# Set correct ownership for all application files
+RUN chown -R app:app /app
+
+# Expose service port (not used in minimal test but kept for consistency)
+EXPOSE 4000
+
+# Run as a non-root user
+USER app
+
+# Default entrypoint
+ENTRYPOINT ["/app/ore-ingest"]
