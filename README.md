@@ -100,7 +100,9 @@ curl http://localhost:4000/
 | Ubuntu Unoptimized | 127MB | ~3 min | ✅ Excellent | Working |
 | Alpine Linux | 40-56MB | ~5 min | ❌ Runtime Failures | **DOES NOT WORK** |
 
-**Recommendation**: Use Ubuntu Optimized for production. All Alpine versions fail at runtime despite successful builds. See `Dockerfile.alpine` for comprehensive test results and failure analysis.
+**Recommendation**: Use Ubuntu Optimized (117MB) for production. All Alpine versions fail at runtime despite successful builds. See `Dockerfile.alpine` for comprehensive test results and failure analysis.
+
+**Key Finding**: 8MB reliable savings > 10MB unusable savings
 
 ### Environment Variables
 
@@ -387,6 +389,8 @@ rustc --version
 | `ore-ingest:working` | 127MB | ✅ Working baseline |
 | `ore-ingest:alpine-*` | 40-56MB | ❌ **DOES NOT WORK** |
 
+**Performance**: Ubuntu optimized provides 6.3% size reduction with proven reliability
+
 **Note**: All Alpine versions fail at runtime despite successful builds. Size advantages are meaningless if containers don't run. Ubuntu optimized provides 8MB reduction (6.3% smaller) with proven reliability. See `Dockerfile.alpine` for detailed failure analysis.
 
 #### Runtime Errors
@@ -449,10 +453,11 @@ cargo build --target x86_64-unknown-linux-musl --release
 ### Production Optimization Strategy
 
 #### Recommended Approach
-1. **Use Ubuntu base** for reliability
-2. **Apply safe optimizations**: `-C opt-level=s` + `strip`
-3. **Avoid LTO** with cargo-chef multi-stage builds
+1. **Use Ubuntu Optimized** for production (117MB, proven working)
+2. **Apply safe optimizations**: `-C opt-level=s` + `strip` (8MB savings)
+3. **Avoid LTO** with cargo-chef multi-stage builds (breaks dependency caching)
 4. **Test thoroughly** - size benefits are meaningless if it doesn't work
+5. **Learn from failures** - see `Dockerfile.alpine` for complete analysis
 
 #### Size Impact
 ```
