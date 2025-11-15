@@ -1,18 +1,23 @@
 # syntax=docker/dockerfile:1
 #
-# ORE Ingest Dockerfile - Alpine optimized with safe Rust flags
+# ORE Ingest Dockerfile - Alpine with musl targeting (EXPERIMENTAL)
+#
+# HONEST STATUS: Alpine version has runtime issues despite musl targeting
+# - Binary is properly linked to musl (no glibc errors)
+# - Container exits immediately when started (root cause unknown)
+# - Ubuntu version recommended for production reliability
+#
+# POTENTIAL ISSUES TO INVESTIGATE:
+# - Missing runtime dependencies in Alpine
+# - TLS/SSL library compatibility (musl vs OpenSSL)
+# - Static vs dynamic linking issues
+# - Memory allocation differences between glibc and musl
 # Uses cargo-chef for optimal caching and cross-platform builds
 # Uses Alpine Linux for minimal size and fast builds
-# Optimized for ARM Mac builds with proper dependency handling
-#
-# LEARNING NOTES:
-# - SAFE: -C opt-level=s (size optimization) - reduces binary size
-# - SAFE: strip command - removes debug symbols for size reduction
-# - AVOID: -C lto=fat (Link Time Optimization) - breaks cargo-chef dependency caching
-#         LTO tries to optimize across crate boundaries but conflicts with cargo-chef's
-#         pre-compiled dependency approach, causing compilation failures during cook phase
-# - ALPINE: Must target x86_64-unknown-linux-musl for Alpine Linux compatibility
-#         Alpine uses musl libc, not glibc, so we need explicit musl targeting
+# ATTEMPTED FIX: Added proper musl targeting for Alpine compatibility
+# - ✅ Fixed glibc linking errors
+# - ❌ Still has runtime execution issues
+# - 🔍 Requires further investigation for production use
 
 # This ARG must be declared before the first FROM so it can be used there.
 ARG BUILD_PLATFORM=linux/amd64
@@ -38,7 +43,7 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Add musl target for Alpine compatibility
+# Add musl target for Alpine compatibility (fixes linking but not runtime)
 RUN rustup target add x86_64-unknown-linux-musl
 
 WORKDIR /app
@@ -76,10 +81,10 @@ ARG BUILD_PLATFORM
 # Copy to recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json
 
-# Build to dependencies using to recipe with safe size optimization and musl target
+# Build to dependencies using to recipe with musl targeting
 RUN PKG_CONFIG_ALLOW_CROSS=1 \
     PROTOC=/usr/bin/protoc \
-    RUSTFLAGS="-C target-cpu=generic -C opt-level=s" \
+    RUSTFLAGS="-C target-cpu=generic" \
     CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
     cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
 
@@ -90,11 +95,9 @@ COPY api/Cargo.toml ./api/
 COPY ingest/src ./ingest/src/
 COPY api/src ./api/src/
 
-# Build to actual application binary with size optimization and stripping for musl
-RUN RUSTFLAGS="-C target-cpu=generic -C opt-level=s" \
-    CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
-    cargo build --release --target x86_64-unknown-linux-musl --package ore-ingest --features api && \
-    strip target/x86_64-unknown-linux-musl/release/ore-ingest
+# Build to actual application binary with musl target
+RUN CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
+    cargo build --release --target x86_64-unknown-linux-musl --package ore-ingest --features api
 
 ##########################################
 ## 4️⃣ Runtime Stage (Alpine, minimal)  ##
