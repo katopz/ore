@@ -9,6 +9,53 @@ ORE round winner data ingestion service with API server and CLI interface.
 - **Docker Support**: Production-ready containerized deployment
 - **Multi-architecture**: Works on both Intel and ARM Mac
 
+## 🧪 Labs
+
+Progressive learning labs demonstrating different architecture phases:
+
+### Phase 1: Basic Axum Server
+- **Location**: `labs/phase1_axum_only/`
+- **Features**: Minimal web server with basic routing
+- **Purpose**: Foundation for understanding Axum framework
+
+### Phase 2: Axum + Turso Database
+- **Location**: `labs/phase2_axum_turso/`
+- **Features**: Real database integration with Turso (SQLite)
+- **Endpoints**: Health check, status, create record, list records
+- **Database**: Persistent SQLite with proper table creation
+- **Purpose**: Database persistence and data management
+
+### Phase 3: Axum + Turso + Solana
+- **Location**: `labs/phase3_axum_turso_solana/`
+- **Features**: Database + blockchain integration
+- **Endpoints**: All Phase 2 endpoints + Solana info and balance queries
+- **Blockchain**: Solana devnet integration for wallet balance checking
+- **Purpose**: Hybrid web2 + web3 architecture
+
+### Phase 4: Full ORE Integration
+- **Location**: `labs/phase4_full_ore/`
+- **Features**: Complete ORE data ingestion service
+- **Components**: Production API, CLI tools, database integration
+- **Purpose**: Production-ready implementation
+
+#### Running the Labs
+
+```bash
+# Build and test Phase 2 (Database integration)
+cd labs/phase2_axum_turso
+./simple_test.sh
+
+# Build and test Phase 3 (Database + Solana)
+cd labs/phase3_axum_turso_solana
+./simple_test.sh
+
+# Build and test Phase 4 (Full production)
+cd labs/phase4_full_ore
+./simple_test.sh
+```
+
+Each lab is self-contained with its own Dockerfile, test scripts, and documentation.
+
 ## 🏗️ Architecture
 
 ### Service Modes
@@ -282,6 +329,32 @@ docker exec ore-ingest ls -la /app/data
 # Test database connectivity
 docker exec ore-ingest sqlite3 /app/data/ore.db ".tables"
 ```
+
+#### Labs Build Issues
+
+If you encounter issues with the learning labs:
+
+```bash
+# Clear Docker cache for lab builds
+docker system prune -a
+
+# Build specific lab with platform
+cd labs/phase2_axum_turso
+docker build --platform=linux/amd64 -t phase2-test .
+
+# Test lab functionality
+./simple_test.sh
+
+# Check lab-specific logs
+docker logs phase2-test
+```
+
+**Common Lab Issues:**
+- **Phase 2**: Database permission errors - ensure SQLite file is writable
+- **Phase 3**: Solana connection timeouts - check network connectivity
+- **Phase 4**: Missing dependencies - run `cargo build --release` first
+
+For detailed lab documentation, see the `labs/` directory README files.
 
 ### Local Development Issues
 
