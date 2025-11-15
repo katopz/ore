@@ -52,6 +52,7 @@
 
 # This ARG must be declared before the first FROM so it can be used there.
 ARG BUILD_PLATFORM=linux/amd64
+ARG TARGETPLATFORM=linux/amd64
 
 ##########################################
 ## 1️⃣ Chef Stage (cargo-chef)          ##
@@ -71,12 +72,16 @@ RUN apt-get update && \
     libudev-dev \
     zlib1g-dev \
     musl-tools \
+    libc6-amd64-cross \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Add musl target for Alpine compatibility (fixes linking but not runtime)
-# NOTE: This fixed glibc errors but didn't solve runtime execution issues
-RUN rustup target add x86_64-unknown-linux-musl
+# Setup glibc compatibility for cross-compilation
+RUN ln -s /usr/x86_64-linux-gnu/lib64/ /lib64
+ENV LD_LIBRARY_PATH="/lib64:/usr/x86_64-linux-gnu/lib"
+
+# Add both musl and glibc targets for maximum compatibility
+RUN rustup target add x86_64-unknown-linux-musl x86_64-unknown-linux-gnu
 
 WORKDIR /app
 
@@ -127,24 +132,37 @@ COPY api/Cargo.toml ./api/
 COPY ingest/src ./ingest/src/
 COPY api/src ./api/src/
 
-# Build to actual application binary with musl target
-# NOTE: Successfully builds but container still exits at runtime despite proper musl linking
-RUN CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
+# Build to actual application binary with musl target for native Alpine compatibility
+# Add runtime safety flags to prevent segfaults
+RUN PKG_CONFIG_ALLOW_CROSS=1 \
+    PROTOC=/usr/bin/protoc \
+    RUSTFLAGS="-C target-cpu=generic -C link-arg=-Wl,--as-needed -C link-arg=-Wl,--gc-sections" \
+    CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
     cargo build --release --target x86_64-unknown-linux-musl --package ore-ingest --features api
 
+# Debug: Check the binary properties
+RUN ls -la /app/target/x86_64-unknown-linux-musl/release/ore-ingest
+
 ##########################################
-## 4️⃣ Runtime Stage (Alpine, minimal)  ##
+## 4️⃣ Runtime Stage (Alpine, native musl)  ##
 ##########################################
 
 FROM --platform=${BUILD_PLATFORM} alpine:3.19
 
-# Install only runtime dependencies
+# Install only minimal runtime dependencies for native musl
 RUN apk update && \
     apk add --no-cache \
     ca-certificates \
     curl \
     libgcc \
     && rm -rf /var/cache/apk/*
+
+# Clean library path for native musl execution
+ENV LD_LIBRARY_PATH="/lib:/usr/lib"
+
+# Add debug environment variables
+ENV RUST_BACKTRACE=1
+ENV RUST_LOG=debug
 
 # Create a dedicated non-root user for security
 RUN addgroup -g 1000 app && \
@@ -154,7 +172,6 @@ RUN addgroup -g 1000 app && \
 WORKDIR /app
 
 # Copy to compiled binary from the builder stage (musl target)
-# NOTE: Binary is correctly musl-linked but runtime issues persist
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/ore-ingest /app/ore-ingest
 
 # Set correct ownership for all application files
