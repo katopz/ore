@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1
 #
-# ORE Ingest Dockerfile - Production Optimized
+# ORE Ingest Dockerfile - Based on working phase3_axum_turso_solana pattern
 # Uses cargo-chef for optimal caching and cross-platform builds
-# Optimized Ubuntu 22.04 base with binary stripping for size reduction
-# ARM Mac compatible with proper dependency handling
+# Optimized for ARM Mac builds with proper dependency handling
 
 # This ARG must be declared before the first FROM so it can be used there.
 ARG BUILD_PLATFORM=linux/amd64
@@ -25,7 +24,6 @@ RUN apt-get update && \
     protobuf-compiler \
     libudev-dev \
     zlib1g-dev \
-    binutils \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -49,7 +47,7 @@ COPY api/Cargo.toml ./api/
 COPY ingest/src ./ingest/src/
 COPY api/src ./api/src/
 
-# Prepare recipe for building dependencies
+# Prepare the recipe for building dependencies
 RUN cargo chef prepare --recipe-path recipe.json
 
 ##########################################
@@ -64,10 +62,10 @@ ARG BUILD_PLATFORM
 # Copy the recipe from planner stage
 COPY --from=planner /app/recipe.json recipe.json
 
-# Build dependencies using the recipe with size optimizations
+# Build dependencies using the recipe
 RUN PKG_CONFIG_ALLOW_CROSS=1 \
     PROTOC=/usr/bin/protoc \
-    RUSTFLAGS="-C target-cpu=generic -C opt-level=s -C lto=fat" \
+    RUSTFLAGS="-C target-cpu=generic" \
     cargo chef cook --release --recipe-path recipe.json
 
 # Copy the actual source code
@@ -77,51 +75,49 @@ COPY api/Cargo.toml ./api/
 COPY ingest/src ./ingest/src/
 COPY api/src ./api/src/
 
-# Build the actual application binary with aggressive optimizations and stripping
-RUN RUSTFLAGS="-C target-cpu=generic -C opt-level=s -C lto=fat" \
-    cargo build --release --package ore-ingest --features api && \
-    strip target/release/ore-ingest
+# Build the actual application binary
+RUN cargo build --release --package ore-ingest --features api
 
 ##########################################
 ## 4️⃣ Runtime Stage (minimal, secure) ##
 ##########################################
 
-FROM --platform=${BUILD_PLATFORM} ubuntu:22.04
+FROM --platform=${BUILD_PLATFORM} ubuntu:20.04
 
-# Install only runtime dependencies
+# Install runtime dependencies including OpenSSL libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    libssl3 \
-    binutils \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    libssl1.1 \
+    libudev1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create a dedicated non-root user for security
-RUN useradd -r -u 1000 app
+RUN groupadd -r app && \
+    useradd -r -u 1000 -g app app
 
-# Set working directory
+# Set the working directory for the runtime stage
 WORKDIR /app
 
-# Copy the compiled binary from the builder stage (already stripped)
+# Copy the compiled binary from the builder stage
 COPY --from=builder /app/target/release/ore-ingest /app/ore-ingest
 
 # Set correct ownership for all application files
 RUN chown -R app:app /app
 
-# Create data directory for database
-RUN mkdir -p /app/data && chown app:app /app/data
-
 # Expose the service port
 EXPOSE 4000
 
-# Health check to ensure that API service is responsive
+# Health check to ensure the API service is responsive
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
     CMD curl -f http://localhost:4000/ || exit 1
 
-# Run as a non-root user
+# Run as the non-root user
 USER app
+
+# Create data directory for database
+RUN mkdir -p /app/data
 
 # Default entrypoint with environment variables
 ENV PORT=4000
