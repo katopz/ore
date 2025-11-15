@@ -96,10 +96,11 @@ curl http://localhost:4000/
 
 | Base Image | Size | Build Time | Compatibility | Status |
 |------------|------|------------|-------------|---------|
-| Ubuntu 22.04 | 127MB | ~3 min | ✅ Excellent | Recommended |
-| Alpine Linux | 56.8MB | ~5 min | ⚠️ Linking Issues | Experimental |
+| Ubuntu Optimized | 117MB | ~3 min | ✅ Excellent | **PRODUCTION READY** |
+| Ubuntu Unoptimized | 127MB | ~3 min | ✅ Excellent | Working |
+| Alpine Linux | 40-56MB | ~5 min | ❌ Runtime Failures | **DOES NOT WORK** |
 
-**Recommendation**: Use Ubuntu 22.04-based Dockerfile for production. While Alpine is smaller, it has dynamic linking issues with cross-compilation on ARM Mac.
+**Recommendation**: Use Ubuntu Optimized for production. All Alpine versions fail at runtime despite successful builds. See `Dockerfile.alpine` for comprehensive test results and failure analysis.
 
 ### Environment Variables
 
@@ -328,6 +329,11 @@ docker exec ore-ingest ls -la /app/data
 
 # Test database connectivity
 docker exec ore-ingest sqlite3 /app/data/ore.db ".tables"
+
+# For Alpine troubleshooting (all versions fail at runtime)
+docker exec ore-ingest ldd /app/ore-ingest
+# Should show: /lib/ld-musl-x86_64.so.1 for musl, NOT ld-linux-x86-64.so.2
+# Even with correct musl linking, containers still exit immediately
 ```
 
 #### Labs Build Issues
@@ -377,11 +383,11 @@ rustc --version
 
 | Image | Size | Status | Use Case |
 |-------|------|--------|-----------|
-| `ore-ingest:latest` | 127MB | ✅ Production ready |
-| `ore-ingest:alpine` | 56.8MB | ⚠️ Development only |
-| `ore-ingest:slim` | 127MB | ✅ Alternative production |
+| `ore-ingest:ubuntu-optimized` | 117MB | ✅ **PRODUCTION READY** |
+| `ore-ingest:working` | 127MB | ✅ Working baseline |
+| `ore-ingest:alpine-*` | 40-56MB | ❌ **DOES NOT WORK** |
 
-**Note**: Alpine builds achieve 55% size reduction (56.8MB vs 127MB) but have cross-compilation issues on ARM Mac. Ubuntu 22.04 builds with optimizations provide best balance of size and reliability.
+**Note**: All Alpine versions fail at runtime despite successful builds. Size advantages are meaningless if containers don't run. Ubuntu optimized provides 8MB reduction (6.3% smaller) with proven reliability. See `Dockerfile.alpine` for detailed failure analysis.
 
 #### Runtime Errors
 
@@ -392,6 +398,69 @@ RUST_LOG=debug cargo run
 # Test database
 sqlite3 ore.db ".tables"
 ```
+
+## 🔧 Rust Optimization Learnings
+
+### Tested Optimizations
+
+#### ✅ Safe Optimizations (RECOMMENDED)
+```toml
+# In Dockerfile RUSTFLAGS
+RUSTFLAGS="-C target-cpu=generic -C opt-level=s"
+```
+**Benefits:**
+- 8MB size reduction (6.3% smaller)
+- Compatible with cargo-chef dependency caching
+- Works with cross-compilation
+
+```bash
+# Binary stripping (also recommended)
+RUN cargo build --release --package ore-ingest --features api && \
+    strip target/release/ore-ingest
+```
+
+#### ❌ Dangerous Optimizations (AVOID)
+```toml
+# BREAKS: Link Time Optimization
+RUSTFLAGS="-C lto=fat"  # ❌ BREAKS CARGO-CHEF
+```
+**Why it fails:**
+- LTO tries to optimize across crate boundaries during linking
+- cargo-chef pre-compiles dependencies separately 
+- Creates conflict: LTO needs all code at link time, cargo-chef splits compilation
+- **Result**: Build fails during `cargo chef cook` phase
+
+### Alpine musl Targeting Results
+
+#### Attempted Fix
+```bash
+# Add musl targeting for Alpine compatibility
+RUN rustup target add x86_64-unknown-linux-musl
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc
+cargo build --target x86_64-unknown-linux-musl --release
+```
+
+#### Results Analysis
+- **Build Status**: ✅ Compiles successfully
+- **Binary Linking**: ✅ Correctly linked to musl (`/lib/ld-musl-x86_64.so.1`)
+- **Runtime Status**: ❌ Container exits immediately
+- **Root Cause**: Still unknown (runtime environment incompatibility)
+
+### Production Optimization Strategy
+
+#### Recommended Approach
+1. **Use Ubuntu base** for reliability
+2. **Apply safe optimizations**: `-C opt-level=s` + `strip`
+3. **Avoid LTO** with cargo-chef multi-stage builds
+4. **Test thoroughly** - size benefits are meaningless if it doesn't work
+
+#### Size Impact
+```
+Ubuntu Unoptimized: 127MB → Ubuntu Optimized: 117MB (8MB saved)
+Alpine "working": 50MB → Alpine "optimized": 40MB (10MB saved, but doesn't work)
+```
+
+**Key Learning**: 8MB reliable savings > 10MB unusable savings
 
 ## 📊 Monitoring & Observability
 
@@ -475,6 +544,17 @@ services:
 - **Ingestion Speed**: ~100 rounds/second
 - **Memory Usage**: ~50MB baseline
 - **CPU Usage**: < 10% during normal operation
+
+### Optimization Benchmarks
+
+| Configuration | Build Time | Image Size | Runtime Status |
+|---------------|------------|------------|----------------|
+| Ubuntu Unoptimized | ~3 min | 127MB | ✅ Working |
+| Ubuntu Optimized | ~3 min | 117MB | ✅ Working |
+| Alpine + musl target | ~5 min | 40-56MB | ❌ Fails at runtime |
+| Alpine + LTO | Failed | N/A | ❌ Build fails |
+
+**Performance Impact**: Safe optimizations provide 6.3% size reduction without affecting runtime performance or reliability.
 
 ## 🤝 Contributing
 
