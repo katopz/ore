@@ -1,27 +1,105 @@
 # syntax=docker/dockerfile:1
-# Build stage - FORCE x86_64 platform
-FROM --platform=linux/amd64 ubuntu:20.04 AS builder
+#
+# Optimized Dockerfile for Phase 2 - Axum + Turso Database
+# Based on reev project pattern with platform forcing for x86_64
 
-ENV DEBIAN_FRONTEND=noninteractive
+# This ARG must be declared before the first FROM so it can be used there.
+ARG BUILD_PLATFORM=linux/amd64
 
-# Install dependencies
-RUN apt-get update && apt-get install -y curl build-essential pkg-config
+##########################################
+## 1️⃣ Chef Stage (cargo-chef)          ##
+##########################################
 
-# Install Rust
-RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+FROM --platform=${BUILD_PLATFORM} lukemathwalker/cargo-chef:0.1.72-rust-1.88.0-slim-bullseye AS chef
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    libssl-dev \
+    pkg-config \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY . .
 
-# NATIVE compilation (no cross-compilation needed!)
-RUN cargo build --release
+##########################################
+## 2️⃣ Planner Stage                   ##
+##########################################
 
-# Runtime stage - also x86_64
-FROM --platform=linux/amd64 ubuntu:20.04
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y curl
-COPY --from=0 /app/target/release/phase2-axum-turso /app/
+FROM chef AS planner
+
+# Re-declare the ARG for this stage
+ARG BUILD_PLATFORM
+
+# Copy all the source files for dependency planning
+COPY Cargo.toml ./
+COPY src/ ./src/
+
+# Prepare the recipe for building dependencies
+RUN cargo chef prepare --recipe-path recipe.json
+
+##########################################
+## 3️⃣ Builder Stage                    ##
+##########################################
+
+FROM chef AS builder
+
+# Re-declare the ARG for this stage
+ARG BUILD_PLATFORM
+
+# Copy the recipe from planner stage
+COPY --from=planner /app/recipe.json recipe.json
+
+# Build dependencies using the recipe
+RUN PKG_CONFIG_ALLOW_CROSS=1 \
+    RUSTFLAGS="-C target-cpu=generic" \
+    cargo chef cook --release --recipe-path recipe.json
+
+# Copy the actual source code
+COPY Cargo.toml ./
+COPY src/ ./src/
+
+# Build the actual application binary
+RUN PKG_CONFIG_ALLOW_CROSS=1 \
+    RUSTFLAGS="-C target-cpu=generic" \
+    cargo build --release
+
+##########################################
+## 4️⃣ Runtime Stage (minimal, secure) ##
+##########################################
+
+FROM --platform=${BUILD_PLATFORM} ubuntu:20.04
+
+# Install runtime dependencies including OpenSSL libraries
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    libssl1.1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a dedicated non-root user for security
+RUN groupadd -r app && \
+    useradd -r -u 1000 -g app app
+
+# Set the working directory for the runtime stage
 WORKDIR /app
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /app/target/release/phase2-axum-turso /app/phase2-server
+
+# Set correct ownership for all application files
+RUN chown -R app:app /app
+
+# Expose the service port
 EXPOSE 3000
-CMD ["/app/phase2-axum-turso"]
+
+# Health check to ensure the API service is responsive
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
+    CMD curl -f http://localhost:3000/ || exit 1
+
+# Run as the non-root user
+USER app
+
+# Default entrypoint
+ENTRYPOINT ["/app/phase2-server"]
