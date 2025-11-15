@@ -91,20 +91,20 @@ RUN RUSTFLAGS="-C target-cpu=generic -C opt-level=s" \
 ## 4️⃣ Runtime Stage (minimal, secure) ##
 ##########################################
 
-FROM --platform=${BUILD_PLATFORM} ubuntu:20.04
+FROM --platform=${BUILD_PLATFORM} ubuntu:24.04
 
 # Install runtime dependencies including OpenSSL libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    libssl1.1 \
+    libssl3 \
     libudev1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a dedicated non-root user for security
 RUN groupadd -r app && \
-    useradd -r -u 1000 -g app app
+    useradd -r -u 1001 -g app app
 
 # Set the working directory for the runtime stage
 WORKDIR /app
