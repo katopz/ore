@@ -1,23 +1,54 @@
 # syntax=docker/dockerfile:1
 #
-# ORE Ingest Dockerfile - Alpine with musl targeting (EXPERIMENTAL)
+# ORE Ingest Dockerfile - Alpine with comprehensive testing results
 #
-# HONEST STATUS: Alpine version has runtime issues despite musl targeting
-# - Binary is properly linked to musl (no glibc errors)
-# - Container exits immediately when started (root cause unknown)
-# - Ubuntu version recommended for production reliability
+# === COMPREHENSIVE TEST RESULTS ===
+# 📊 FINAL STATUS: All Alpine versions FAIL despite extensive optimization attempts
 #
-# POTENTIAL ISSUES TO INVESTIGATE:
-# - Missing runtime dependencies in Alpine
-# - TLS/SSL library compatibility (musl vs OpenSSL)
-# - Static vs dynamic linking issues
-# - Memory allocation differences between glibc and musl
-# Uses cargo-chef for optimal caching and cross-platform builds
-# Uses Alpine Linux for minimal size and fast builds
-# ATTEMPTED FIX: Added proper musl targeting for Alpine compatibility
-# - ✅ Fixed glibc linking errors
-# - ❌ Still has runtime execution issues
-# - 🔍 Requires further investigation for production use
+# 🏗️ BUILT SUCCESSFULLY: All versions compile and build correctly
+# 🚪 RUNTIME STATUS: Container exits immediately for ALL versions tested
+#
+# 📈 SIZE COMPARISON (IRRELEVANT IF DOESN'T RUN):
+# - Alpine "optimized": 40.4MB (❌ DOES NOT WORK)
+# - Alpine "fixed": 50.8MB (❌ DOES NOT WORK)
+# - Alpine "original": 50.4MB (❌ NEVER WORKED)
+# - Ubuntu optimized: 117MB (✅ WORKS PERFECTLY)
+#
+# 🧪 TESTING PERFORMED:
+# 1️⃣ Original Alpine (commit 1bccf91):
+#    - Built: ✅ SUCCESS
+#    - Runtime: ❌ "rosetta error: failed to open elf at /lib64/ld-linux-x86-64.so.2"
+#    - Issue: glibc binary on musl-based Alpine
+#
+# 2️⃣ Alpine with -C opt-level=s + strip:
+#    - Built: ✅ SUCCESS
+#    - Runtime: ❌ Same glibc errors
+#    - Issue: Rust optimizations don't fix fundamental glibc/musl incompatibility
+#
+# 3️⃣ Alpine with LTO optimizations (-C lto=fat):
+#    - Built: ❌ FAILED during cargo chef cook phase
+#    - Error: LTO incompatible with cargo-chef dependency caching
+#    - Learning: NEVER use LTO with cargo-chef multi-stage builds
+#
+# 4️⃣ Alpine with musl targeting:
+#    - Built: ✅ SUCCESS (after 4 minutes rebuilding dependencies)
+#    - Binary linking: ✅ "/lib/ld-musl-x86_64.so.1" (correct musl linking)
+#    - Runtime: ❌ Container exits immediately (root cause still unknown)
+#
+# 🔍 ROOT CAUSE ANALYSIS:
+# - glibc compatibility: ✅ FIXED with musl targeting
+# - Binary linking: ✅ FIXED (musl properly linked)
+# - Runtime execution: ❌ STILL FAILING (requires deeper investigation)
+#
+# 💡 LEARNINGS:
+# - Alpine complexity goes far beyond simple musl targeting
+# - Size advantages meaningless if container doesn't run
+# - Ubuntu optimized version provides best reliability/size balance
+# - Some Rust optimizations break cargo-chef caching architecture
+#
+# ✅ PRODUCTION RECOMMENDATION: Ubuntu Optimized (117MB)
+# ❌ AVOID: All Alpine versions for production deployment
+# 🔬 USE CASE: Alpine only for experimental size optimization research
 
 # This ARG must be declared before the first FROM so it can be used there.
 ARG BUILD_PLATFORM=linux/amd64
@@ -44,6 +75,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Add musl target for Alpine compatibility (fixes linking but not runtime)
+# NOTE: This fixed glibc errors but didn't solve runtime execution issues
 RUN rustup target add x86_64-unknown-linux-musl
 
 WORKDIR /app
@@ -96,6 +128,7 @@ COPY ingest/src ./ingest/src/
 COPY api/src ./api/src/
 
 # Build to actual application binary with musl target
+# NOTE: Successfully builds but container still exits at runtime despite proper musl linking
 RUN CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
     cargo build --release --target x86_64-unknown-linux-musl --package ore-ingest --features api
 
@@ -121,6 +154,7 @@ RUN addgroup -g 1000 app && \
 WORKDIR /app
 
 # Copy to compiled binary from the builder stage (musl target)
+# NOTE: Binary is correctly musl-linked but runtime issues persist
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/ore-ingest /app/ore-ingest
 
 # Set correct ownership for all application files
