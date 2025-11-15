@@ -96,13 +96,20 @@ curl http://localhost:4000/
 
 | Base Image | Size | Build Time | Compatibility | Status |
 |------------|------|------------|-------------|---------|
-| Ubuntu Optimized | 117MB | ~3 min | ✅ Excellent | **PRODUCTION READY** |
+| **Ubuntu 24.04 Optimized** | **115MB** | ~3 min | ✅ Excellent | **SMALLEST WORKING** |
+| Ubuntu 20.04 Optimized | 117MB | ~3 min | ✅ Excellent | Working |
 | Ubuntu Unoptimized | 127MB | ~3 min | ✅ Excellent | Working |
 | Alpine Linux | 40-56MB | ~5 min | ❌ Runtime Failures | **DOES NOT WORK** |
 
-**Recommendation**: Use Ubuntu Optimized (117MB) for production. All Alpine versions fail at runtime despite successful builds. See `Dockerfile.alpine` for comprehensive test results and failure analysis.
+**Recommendation**: Use Ubuntu 24.04 Optimized (115MB) for production. This is the smallest version that actually works. See `Dockerfile.alpine` for comprehensive Alpine failure analysis.
 
-**Key Finding**: 8MB reliable savings > 10MB unusable savings
+**Key Finding**: Ubuntu 24.04 provides 2MB additional savings over previous best while maintaining full functionality. All Alpine versions remain non-functional despite smaller size claims.
+
+**🔍 Dive Analysis Results**:
+- Ubuntu 24.04: 87.06% efficiency, 28MB binary size
+- Ubuntu 20.04: 87.01% efficiency, 28MB binary size  
+- All versions have same 28MB binary - difference is base OS overhead
+- Ubuntu 24.04 has cleaner base with less waste
 
 ### Environment Variables
 
@@ -385,13 +392,20 @@ rustc --version
 
 | Image | Size | Status | Use Case |
 |-------|------|--------|-----------|
+| `ore-ingest:ubuntu-24.04` | **115MB** | ✅ **SMALLEST WORKING** |
 | `ore-ingest:ubuntu-optimized` | 117MB | ✅ **PRODUCTION READY** |
 | `ore-ingest:working` | 127MB | ✅ Working baseline |
 | `ore-ingest:alpine-*` | 40-56MB | ❌ **DOES NOT WORK** |
 
-**Performance**: Ubuntu optimized provides 6.3% size reduction with proven reliability
+**Performance**: Ubuntu 24.04 optimized provides 9.4% total size reduction from unoptimized baseline with proven reliability.
 
-**Note**: All Alpine versions fail at runtime despite successful builds. Size advantages are meaningless if containers don't run. Ubuntu optimized provides 8MB reduction (6.3% smaller) with proven reliability. See `Dockerfile.alpine` for detailed failure analysis.
+**Note**: All Alpine versions fail at runtime despite successful builds. Size advantages are meaningless if containers don't run. Ubuntu 24.04 optimized provides 12MB total reduction (9.4% smaller) with proven reliability. See `Dockerfile.alpine` for detailed failure analysis.
+
+**🔍 Dive Analysis Key Insights**:
+- All working images have identical 28MB binary size
+- Ubuntu 24.04 achieves better layer efficiency (87.06% vs 87.01%)
+- Base image differences account for size variations
+- 28MB binary + 87MB OS/runtime = 115MB total optimal solution
 
 #### Runtime Errors
 
@@ -453,19 +467,25 @@ cargo build --target x86_64-unknown-linux-musl --release
 ### Production Optimization Strategy
 
 #### Recommended Approach
-1. **Use Ubuntu Optimized** for production (117MB, proven working)
-2. **Apply safe optimizations**: `-C opt-level=s` + `strip` (8MB savings)
-3. **Avoid LTO** with cargo-chef multi-stage builds (breaks dependency caching)
-4. **Test thoroughly** - size benefits are meaningless if it doesn't work
-5. **Learn from failures** - see `Dockerfile.alpine` for complete analysis
+1. **Use Ubuntu 24.04 Optimized** for production (115MB, smallest working)
+2. **Apply safe optimizations**: `-C opt-level=s` + `strip` (12MB total savings)
+3. **Use Ubuntu 24.04 LTS** - newer base with smaller footprint
+4. **Avoid LTO** with cargo-chef multi-stage builds (breaks dependency caching)
+5. **Test thoroughly** - size benefits are meaningless if it doesn't work
+6. **Learn from failures** - see `Dockerfile.alpine` for complete Alpine analysis
 
 #### Size Impact
 ```
-Ubuntu Unoptimized: 127MB → Ubuntu Optimized: 117MB (8MB saved)
+Ubuntu Unoptimized: 127MB → Ubuntu 24.04 Optimized: 115MB (12MB saved - 9.4% reduction)
 Alpine "working": 50MB → Alpine "optimized": 40MB (10MB saved, but doesn't work)
 ```
 
-**Key Learning**: 8MB reliable savings > 10MB unusable savings
+**Key Learning**: Ubuntu 24.04 provides the optimal balance of size savings and proven reliability. The 28MB binary is the actual floor - that's what our Rust application weighs.
+
+**🔍 Binary Size Analysis**:
+- All images: 28MB binary (constant across all working versions)
+- Ubuntu 24.04: 87MB OS/runtime overhead (most efficient)
+- Total: 28MB app + 87MB runtime = 115MB optimal solution
 
 ## 📊 Monitoring & Observability
 
